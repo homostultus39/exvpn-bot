@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.env
+*.log
+bot/data/*.db
+bot/data/*.log
+united.py
+.venv
+venv

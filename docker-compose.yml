@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  exvpn-bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: exvpn-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./bot/data:/app/bot/data

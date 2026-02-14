@@ -1,0 +1,23 @@
+[project]
+name = "exvpn-bot"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "homostultus39",email = "homostultus39@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "aiogram>=3.25.0,<4.0.0",
+    "loguru>=0.7.3,<0.8.0",
+    "pydantic-settings>=2.12.0,<3.0.0",
+    "httpx>=0.28.1",
+    "aiosqlite>=0.20.0"
+]
+
+[tool.poetry]
+packages = [{include = "exvpn_bot", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
