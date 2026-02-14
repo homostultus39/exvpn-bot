@@ -12,6 +12,8 @@ from bot.routers.profile import router as profile_router
 from bot.routers.admin.main import router as admin_main_router
 from bot.routers.admin.clusters import router as admin_clusters_router
 from bot.routers.admin.cluster_create import router as admin_cluster_create_router
+from bot.routers.admin.clients import router as admin_clients_router
+from bot.routers.admin.client_register import router as admin_client_register_router
 from bot.routers.admin.statistics import router as admin_statistics_router
 from bot.utils.logger import logger
 
@@ -34,6 +36,8 @@ async def start_polling():
     dp.include_router(admin_main_router)
     dp.include_router(admin_clusters_router)
     dp.include_router(admin_cluster_create_router)
+    dp.include_router(admin_clients_router)
+    dp.include_router(admin_client_register_router)
     dp.include_router(admin_statistics_router)
 
     logger.info("Bot starting...")

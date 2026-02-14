@@ -1,0 +1,127 @@
+from datetime import datetime
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from bot.management.dependencies import get_api_client
+from bot.entities.client.repository import ClientRepository
+from bot.entities.client.service import ClientService
+from bot.middlewares.admin import AdminMiddleware
+from bot.utils.logger import logger
+
+router = Router()
+router.message.middleware(AdminMiddleware())
+router.callback_query.middleware(AdminMiddleware())
+
+
+class ClientRegisterForm(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_expiration_date = State()
+
+
+async def get_client_service():
+    api_client = get_api_client()
+    async with api_client:
+        client_repo = ClientRepository(api_client)
+        return ClientService(client_repo)
+
+
+@router.callback_query(F.data == "admin_register_client")
+async def start_client_register(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "👤 <b>Регистрация клиента</b>\n\n"
+        "Шаг 1/2: Введите Telegram ID пользователя\n"
+        "(Например: 123456789)"
+    )
+    await state.set_state(ClientRegisterForm.waiting_for_user_id)
+    await callback.answer()
+
+
+@router.message(ClientRegisterForm.waiting_for_user_id)
+async def process_user_id(message: Message, state: FSMContext):
+    try:
+        user_id = int(message.text.strip())
+        if user_id <= 0:
+            raise ValueError("User ID must be positive")
+
+        await state.update_data(user_id=user_id)
+        await message.answer(
+            "👤 <b>Регистрация клиента</b>\n\n"
+            "Шаг 2/2: Введите дату истечения подписки\n"
+            "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n"
+            "(Например: 31.12.2026 или 31.12.2026 23:59)"
+        )
+        await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
+    except ValueError:
+        await message.answer(
+            "❌ Некорректный Telegram ID. Введите положительное число.\n"
+            "Попробуйте еще раз:"
+        )
+
+
+@router.message(ClientRegisterForm.waiting_for_expiration_date)
+async def process_expiration_date(message: Message, state: FSMContext):
+    date_str = message.text.strip()
+
+    try:
+        try:
+            expires_at = datetime.strptime(date_str, "%d.%m.%Y %H:%M")
+        except ValueError:
+            expires_at = datetime.strptime(date_str, "%d.%m.%Y")
+
+        if expires_at < datetime.utcnow():
+            await message.answer(
+                "⚠️ Указанная дата уже прошла. Введите будущую дату:\n"
+                "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ"
+            )
+            return
+
+        data = await state.get_data()
+        user_id = data["user_id"]
+
+        client_service = await get_client_service()
+        username = str(user_id)
+
+        existing_client = await client_service.find_by_username(username)
+        if existing_client:
+            await message.answer(
+                f"⚠️ <b>Клиент уже существует</b>\n\n"
+                f"🆔 ID: <code>{existing_client.id}</code>\n"
+                f"👤 Username: {existing_client.username}\n"
+                f"📅 Текущая дата истечения: {existing_client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"Регистрация отменена."
+            )
+            await state.clear()
+            return
+
+        client = await client_service.create_client(username, expires_at)
+
+        await message.answer(
+            f"✅ <b>Клиент зарегистрирован!</b>\n\n"
+            f"👤 Telegram ID: <code>{user_id}</code>\n"
+            f"🆔 Client ID: <code>{client.id}</code>\n"
+            f"📅 Подписка до: {client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"Пользователь может начать использовать бота!"
+        )
+
+        logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
+
+    except ValueError:
+        await message.answer(
+            "❌ Некорректный формат даты. Используйте:\n"
+            "ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
+            "Примеры:\n"
+            "• 31.12.2026\n"
+            "• 31.12.2026 23:59\n\n"
+            "Попробуйте еще раз:"
+        )
+        return
+    except Exception as e:
+        logger.error(f"Error registering client: {e}")
+        await message.answer(
+            f"❌ Ошибка при регистрации клиента:\n\n"
+            f"<code>{str(e)}</code>\n\n"
+            f"Проверьте данные и попробуйте снова через /admin"
+        )
+
+    await state.clear()

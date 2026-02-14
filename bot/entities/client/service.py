@@ -14,8 +14,9 @@ class ClientService:
     def __init__(self, repository: ClientRepository):
         self.repository = repository
 
-    async def create_client(self, username: str, days: int = 30) -> ClientResponse:
-        expires_at = datetime.utcnow() + timedelta(days=days)
+    async def create_client(self, username: str, expires_at: datetime | None = None, days: int = 30) -> ClientResponse:
+        if expires_at is None:
+            expires_at = datetime.utcnow() + timedelta(days=days)
         request = CreateClientRequest(username=username, expires_at=expires_at)
         return await self.repository.create(request)
 

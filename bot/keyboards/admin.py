@@ -41,3 +41,17 @@ def get_cluster_actions_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_clients_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(
+            text="👤 Регистрация клиента",
+            callback_data="admin_register_client"
+        )],
+        [InlineKeyboardButton(
+            text="🔄 Обновить",
+            callback_data="admin_clients_refresh"
+        )]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

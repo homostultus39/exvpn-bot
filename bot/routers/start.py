@@ -7,7 +7,7 @@ from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.keyboards.user import get_agreement_keyboard, get_main_menu_keyboard
-from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE
+from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO
 from bot.utils.logger import logger
 
 router = Router()
@@ -35,7 +35,7 @@ async def start_command_handler(message: Message):
         )
     else:
         await message.answer(
-            WELCOME_MESSAGE,
+            WELCOME_MESSAGE.format(CLIENT_INFO),
             reply_markup=get_agreement_keyboard(settings)
         )
 

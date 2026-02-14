@@ -9,7 +9,7 @@ from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
 from bot.keyboards.user import get_location_keyboard
-from bot.messages.user import SELECT_LOCATION, KEY_RECEIVED_TEMPLATE
+from bot.messages.user import SELECT_LOCATION, KEY_RECEIVED_TEMPLATE, CLIENT_INFO
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
 from bot.utils.logger import logger
 
@@ -97,6 +97,7 @@ async def location_selected_handler(callback: CallbackQuery):
             await callback.message.answer_document(
                 document=config_file,
                 caption=KEY_RECEIVED_TEMPLATE.format(
+                    CLIENT_INFO,
                     location=cluster.name,
                     app_type="AmneziaWG"
                 )
@@ -104,6 +105,7 @@ async def location_selected_handler(callback: CallbackQuery):
         else:
             await callback.message.answer(
                 KEY_RECEIVED_TEMPLATE.format(
+                    CLIENT_INFO,
                     location=cluster.name,
                     app_type="AmneziaWG"
                 ) + "\n\n⚠️ Конфиг пока не готов. Попробуйте через минуту."
