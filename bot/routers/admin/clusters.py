@@ -21,13 +21,13 @@ async def get_cluster_service():
     api_client = get_api_client()
     async with api_client:
         cluster_repo = ClusterRepository(api_client)
-        return ClusterService(cluster_repo, settings), api_client
+        return ClusterService(cluster_repo), api_client
 
 
 @router.message(F.text == "🌐 Кластеры")
 async def clusters_list_handler(message: Message):
     try:
-        cluster_service, api_client = await get_cluster_service()
+        cluster_service = await get_cluster_service()
         clusters = await cluster_service.list_clusters()
 
         active_count = sum(1 for c in clusters if c.is_active)
@@ -59,7 +59,7 @@ async def cluster_info_handler(callback: CallbackQuery):
     cluster_id = callback.data.split("_")[2]
 
     try:
-        cluster_service, api_client = await get_cluster_service()
+        cluster_service = await get_cluster_service()
         cluster = await cluster_service.get_cluster(UUID(cluster_id))
 
         status = "✅ Активен" if cluster.is_active else "❌ Неактивен"
@@ -92,7 +92,7 @@ async def cluster_restart_handler(callback: CallbackQuery):
     cluster_id = callback.data.split("_")[3]
 
     try:
-        cluster_service, api_client = await get_cluster_service()
+        cluster_service = await get_cluster_service()
         result = await cluster_service.restart_cluster(UUID(cluster_id))
 
         await callback.answer(f"✅ {result.message}", show_alert=True)
@@ -112,7 +112,7 @@ async def clusters_back_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "admin_clusters_refresh")
 async def clusters_refresh_handler(callback: CallbackQuery):
     try:
-        cluster_service, api_client = await get_cluster_service()
+        cluster_service = await get_cluster_service()
         clusters = await cluster_service.list_clusters()
 
         active_count = sum(1 for c in clusters if c.is_active)

@@ -1,5 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from bot.management.settings import Settings, ClusterConfig
+from bot.management.settings import Settings
+from bot.entities.cluster.models import ClusterWithStatusResponse
 
 
 def get_agreement_keyboard(settings: Settings) -> InlineKeyboardMarkup:
@@ -29,12 +30,12 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 
-def get_location_keyboard(clusters: list[ClusterConfig]) -> InlineKeyboardMarkup:
+def get_location_keyboard(clusters: list[ClusterWithStatusResponse]) -> InlineKeyboardMarkup:
     buttons = []
     for cluster in clusters:
         buttons.append([InlineKeyboardButton(
             text=cluster.name,
-            callback_data=f"location_{cluster.code}"
+            callback_data=f"location_{cluster.id}"
         )])
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад",

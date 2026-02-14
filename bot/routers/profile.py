@@ -1,12 +1,12 @@
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from bot.management.settings import get_settings
 from bot.management.dependencies import get_api_client
-from bot.entities.user.storage import UserStorage
 from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
+from bot.entities.cluster.repository import ClusterRepository
+from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
 from bot.keyboards.user import get_profile_keyboard
@@ -18,23 +18,22 @@ from bot.messages.user import (
 from bot.utils.logger import logger
 
 router = Router()
-settings = get_settings()
 
 
 async def get_services():
-    storage = UserStorage(settings.database_path)
-    await storage.init_db()
-
     api_client = get_api_client()
     async with api_client:
         client_repo = ClientRepository(api_client)
         client_service = ClientService(client_repo)
-        user_service = UserService(storage, client_service)
+        user_service = UserService(client_service)
+
+        cluster_repo = ClusterRepository(api_client)
+        cluster_service = ClusterService(cluster_repo)
 
         peer_repo = PeerRepository(api_client)
         peer_service = PeerService(peer_repo)
 
-        return user_service, client_service, peer_service, api_client
+        return user_service, client_service, cluster_service, peer_service
 
 
 @router.message(F.text == "👤 Профиль")
@@ -43,7 +42,7 @@ async def profile_handler(message: Message):
     username = message.from_user.username or f"user_{telegram_id}"
 
     try:
-        user_service, client_service, peer_service, api_client = await get_services()
+        user_service, client_service, cluster_service, peer_service = await get_services()
         client_id = await user_service.get_client_id(telegram_id)
         client = await client_service.get_client(client_id)
 
@@ -78,7 +77,7 @@ async def my_keys_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
 
     try:
-        user_service, client_service, peer_service, api_client = await get_services()
+        user_service, client_service, cluster_service, peer_service = await get_services()
         client_id = await user_service.get_client_id(telegram_id)
         peers = await peer_service.get_client_peers(client_id)
 
@@ -93,11 +92,11 @@ async def my_keys_handler(callback: CallbackQuery):
 
         keys_text = "🔑 <b>Мои ключи</b>\n\n"
         for i, peer in enumerate(peers, 1):
-            cluster_name = "Неизвестно"
-            for cluster_config in settings.clusters:
-                if cluster_config.uuid == str(peer.cluster_id):
-                    cluster_name = cluster_config.name
-                    break
+            try:
+                cluster = await cluster_service.get_cluster(peer.cluster_id)
+                cluster_name = cluster.name
+            except:
+                cluster_name = "Неизвестно"
 
             keys_text += f"{i}. {cluster_name}\n"
             keys_text += f"   IP: <code>{peer.allocated_ip}</code>\n"

@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from bot.management.settings import get_settings
 from bot.management.dependencies import get_api_client
-from bot.entities.user.storage import UserStorage
+
 from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
@@ -16,17 +16,17 @@ settings = get_settings()
 
 
 async def get_services():
-    storage = UserStorage(settings.database_path)
-    await storage.init_db()
+    
+    
 
     api_client = get_api_client()
     async with api_client:
         client_repo = ClientRepository(api_client)
         client_service = ClientService(client_repo)
-        user_service = UserService(storage, client_service)
+        user_service = UserService(client_service)
         subscription_service = SubscriptionService(client_service)
 
-        return user_service, client_service, subscription_service, api_client
+        return user_service, client_service, subscription_service
 
 
 @router.message(F.text == "💎 Подписка")
@@ -52,7 +52,7 @@ async def buy_subscription_handler(callback: CallbackQuery):
     tariff_code = callback.data.split("_")[1]
 
     try:
-        user_service, client_service, subscription_service, api_client = await get_services()
+        user_service, client_service, subscription_service = await get_services()
         client_id = await user_service.get_client_id(telegram_id)
 
         await subscription_service.buy_subscription(client_id, tariff_code)
@@ -78,7 +78,7 @@ async def extend_tariff_handler(callback: CallbackQuery):
     tariff_code = callback.data.split("_")[1]
 
     try:
-        user_service, client_service, subscription_service, api_client = await get_services()
+        user_service, client_service, subscription_service = await get_services()
         client_id = await user_service.get_client_id(telegram_id)
 
         await subscription_service.extend_subscription(client_id, tariff_code)

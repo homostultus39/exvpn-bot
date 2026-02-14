@@ -19,6 +19,10 @@ def get_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
             callback_data=f"admin_cluster_{cluster.id}"
         )])
     buttons.append([InlineKeyboardButton(
+        text="➕ Создать кластер",
+        callback_data="admin_create_cluster"
+    )])
+    buttons.append([InlineKeyboardButton(
         text="🔄 Обновить",
         callback_data="admin_clusters_refresh"
     )])
