@@ -19,13 +19,6 @@ class ClusterCreateForm(StatesGroup):
     waiting_for_api_key = State()
 
 
-async def get_cluster_service():
-    api_client = get_api_client()
-    async with api_client:
-        cluster_repo = ClusterRepository(api_client)
-        return ClusterService(cluster_repo)
-
-
 @router.callback_query(F.data == "admin_create_cluster")
 async def start_cluster_create(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
@@ -66,23 +59,26 @@ async def process_cluster_api_key(message: Message, state: FSMContext):
     data = await state.get_data()
 
     try:
-        cluster_service = await get_cluster_service()
+        api_client = get_api_client()
+        async with api_client:
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
 
-        cluster = await cluster_service.create_cluster(
-            name=data["name"],
-            endpoint=data["endpoint"],
-            api_key=data["api_key"]
-        )
+            cluster = await cluster_service.create_cluster(
+                name=data["name"],
+                endpoint=data["endpoint"],
+                api_key=data["api_key"]
+            )
 
-        await message.answer(
-            f"✅ <b>Кластер создан!</b>\n\n"
-            f"🌐 Название: {cluster.name}\n"
-            f"🆔 ID: <code>{cluster.id}</code>\n"
-            f"🌍 Endpoint: {cluster.endpoint}\n\n"
-            f"Кластер готов к использованию!"
-        )
+            await message.answer(
+                f"✅ <b>Кластер создан!</b>\n\n"
+                f"🌐 Название: {cluster.name}\n"
+                f"🆔 ID: <code>{cluster.id}</code>\n"
+                f"🌍 Endpoint: {cluster.endpoint}\n\n"
+                f"Кластер готов к использованию!"
+            )
 
-        logger.info(f"Admin {message.from_user.id} created cluster {cluster.id} ({cluster.name})")
+            logger.info(f"Admin {message.from_user.id} created cluster {cluster.id} ({cluster.name})")
 
     except Exception as e:
         logger.error(f"Error creating cluster: {e}")

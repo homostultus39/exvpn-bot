@@ -15,20 +15,6 @@ router = Router()
 settings = get_settings()
 
 
-async def get_services():
-    
-    
-
-    api_client = get_api_client()
-    async with api_client:
-        client_repo = ClientRepository(api_client)
-        client_service = ClientService(client_repo)
-        user_service = UserService(client_service)
-        subscription_service = SubscriptionService(client_service)
-
-        return user_service, client_service, subscription_service
-
-
 @router.message(F.text == "💎 Подписка")
 async def subscription_menu_handler(message: Message):
     await message.answer(
@@ -52,20 +38,26 @@ async def buy_subscription_handler(callback: CallbackQuery):
     tariff_code = callback.data.split("_")[1]
 
     try:
-        user_service, client_service, subscription_service = await get_services()
-        client_id = await user_service.get_client_id(telegram_id)
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            user_service = UserService(client_service)
+            subscription_service = SubscriptionService(client_service)
 
-        await subscription_service.buy_subscription(client_id, tariff_code)
+            client_id = await user_service.get_client_id(telegram_id)
 
-        days = subscription_service.get_tariff_days(tariff_code)
+            await subscription_service.buy_subscription(client_id, tariff_code)
 
-        await callback.message.edit_text(
-            f"✅ <b>Подписка активирована!</b>\n\n"
-            f"Срок: {days} дней\n\n"
-            f"Теперь вы можете получить ключи для подключения."
-        )
-        await callback.answer("✅ Подписка активирована!")
-        logger.info(f"User {telegram_id} bought subscription: {tariff_code}")
+            days = subscription_service.get_tariff_days(tariff_code)
+
+            await callback.message.edit_text(
+                f"✅ <b>Подписка активирована!</b>\n\n"
+                f"Срок: {days} дней\n\n"
+                f"Теперь вы можете получить ключи для подключения."
+            )
+            await callback.answer("✅ Подписка активирована!")
+            logger.info(f"User {telegram_id} bought subscription: {tariff_code}")
 
     except Exception as e:
         logger.error(f"Error in buy_subscription_handler: {e}")
@@ -78,19 +70,25 @@ async def extend_tariff_handler(callback: CallbackQuery):
     tariff_code = callback.data.split("_")[1]
 
     try:
-        user_service, client_service, subscription_service = await get_services()
-        client_id = await user_service.get_client_id(telegram_id)
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            user_service = UserService(client_service)
+            subscription_service = SubscriptionService(client_service)
 
-        await subscription_service.extend_subscription(client_id, tariff_code)
+            client_id = await user_service.get_client_id(telegram_id)
 
-        days = subscription_service.get_tariff_days(tariff_code)
+            await subscription_service.extend_subscription(client_id, tariff_code)
 
-        await callback.message.edit_text(
-            f"✅ <b>Подписка продлена!</b>\n\n"
-            f"Добавлено: {days} дней"
-        )
-        await callback.answer("✅ Подписка продлена!")
-        logger.info(f"User {telegram_id} extended subscription: {tariff_code}")
+            days = subscription_service.get_tariff_days(tariff_code)
+
+            await callback.message.edit_text(
+                f"✅ <b>Подписка продлена!</b>\n\n"
+                f"Добавлено: {days} дней"
+            )
+            await callback.answer("✅ Подписка продлена!")
+            logger.info(f"User {telegram_id} extended subscription: {tariff_code}")
 
     except Exception as e:
         logger.error(f"Error in extend_tariff_handler: {e}")

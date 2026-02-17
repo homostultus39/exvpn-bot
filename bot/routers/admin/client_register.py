@@ -19,11 +19,6 @@ class ClientRegisterForm(StatesGroup):
     waiting_for_expiration_date = State()
 
 
-async def get_client_service():
-    api_client = get_api_client()
-    async with api_client:
-        client_repo = ClientRepository(api_client)
-        return ClientService(client_repo)
 
 
 @router.callback_query(F.data == "admin_register_client")
@@ -79,32 +74,35 @@ async def process_expiration_date(message: Message, state: FSMContext):
         data = await state.get_data()
         user_id = data["user_id"]
 
-        client_service = await get_client_service()
-        username = str(user_id)
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            username = str(user_id)
 
-        existing_client = await client_service.find_by_username(username)
-        if existing_client:
+            existing_client = await client_service.find_by_username(username)
+            if existing_client:
+                await message.answer(
+                    f"⚠️ <b>Клиент уже существует</b>\n\n"
+                    f"🆔 ID: <code>{existing_client.id}</code>\n"
+                    f"👤 Username: {existing_client.username}\n"
+                    f"📅 Текущая дата истечения: {existing_client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                    f"Регистрация отменена."
+                )
+                await state.clear()
+                return
+
+            client = await client_service.create_client(username, expires_at)
+
             await message.answer(
-                f"⚠️ <b>Клиент уже существует</b>\n\n"
-                f"🆔 ID: <code>{existing_client.id}</code>\n"
-                f"👤 Username: {existing_client.username}\n"
-                f"📅 Текущая дата истечения: {existing_client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-                f"Регистрация отменена."
+                f"✅ <b>Клиент зарегистрирован!</b>\n\n"
+                f"👤 Telegram ID: <code>{user_id}</code>\n"
+                f"🆔 Client ID: <code>{client.id}</code>\n"
+                f"📅 Подписка до: {client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"Пользователь может начать использовать бота!"
             )
-            await state.clear()
-            return
 
-        client = await client_service.create_client(username, expires_at)
-
-        await message.answer(
-            f"✅ <b>Клиент зарегистрирован!</b>\n\n"
-            f"👤 Telegram ID: <code>{user_id}</code>\n"
-            f"🆔 Client ID: <code>{client.id}</code>\n"
-            f"📅 Подписка до: {client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-            f"Пользователь может начать использовать бота!"
-        )
-
-        logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
+            logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
 
     except ValueError:
         await message.answer(

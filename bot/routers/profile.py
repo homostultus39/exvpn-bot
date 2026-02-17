@@ -20,52 +20,44 @@ from bot.utils.logger import logger
 router = Router()
 
 
-async def get_services():
-    api_client = get_api_client()
-    async with api_client:
-        client_repo = ClientRepository(api_client)
-        client_service = ClientService(client_repo)
-        user_service = UserService(client_service)
-
-        cluster_repo = ClusterRepository(api_client)
-        cluster_service = ClusterService(cluster_repo)
-
-        peer_repo = PeerRepository(api_client)
-        peer_service = PeerService(peer_repo)
-
-        return user_service, client_service, cluster_service, peer_service
-
-
 @router.message(F.text == "👤 Профиль")
 async def profile_handler(message: Message):
     telegram_id = message.from_user.id
     username = message.from_user.username or f"user_{telegram_id}"
 
     try:
-        user_service, client_service, cluster_service, peer_service = await get_services()
-        client_id = await user_service.get_client_id(telegram_id)
-        client = await client_service.get_client(client_id)
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            user_service = UserService(client_service)
 
-        if client.expires_at > datetime.utcnow():
-            subscription_status = SUBSCRIPTION_ACTIVE_TEMPLATE.format(
-                expires_at=client.expires_at.strftime("%d.%m.%Y %H:%M")
+            peer_repo = PeerRepository(api_client)
+            peer_service = PeerService(peer_repo)
+
+            client_id = await user_service.get_client_id(telegram_id)
+            client = await client_service.get_client(client_id)
+
+            if client.expires_at > datetime.utcnow():
+                subscription_status = SUBSCRIPTION_ACTIVE_TEMPLATE.format(
+                    expires_at=client.expires_at.strftime("%d.%m.%Y %H:%M")
+                )
+            else:
+                subscription_status = SUBSCRIPTION_EXPIRED
+
+            peers = await peer_service.get_client_peers(client_id)
+
+            profile_text = PROFILE_MESSAGE_TEMPLATE.format(
+                telegram_id=telegram_id,
+                username=username,
+                subscription_status=subscription_status,
+                peers_count=len(peers)
             )
-        else:
-            subscription_status = SUBSCRIPTION_EXPIRED
 
-        peers = await peer_service.get_client_peers(client_id)
-
-        profile_text = PROFILE_MESSAGE_TEMPLATE.format(
-            telegram_id=telegram_id,
-            username=username,
-            subscription_status=subscription_status,
-            peers_count=len(peers)
-        )
-
-        await message.answer(
-            profile_text,
-            reply_markup=get_profile_keyboard()
-        )
+            await message.answer(
+                profile_text,
+                reply_markup=get_profile_keyboard()
+            )
 
     except Exception as e:
         logger.error(f"Error in profile_handler: {e}")
@@ -77,33 +69,44 @@ async def my_keys_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
 
     try:
-        user_service, client_service, cluster_service, peer_service = await get_services()
-        client_id = await user_service.get_client_id(telegram_id)
-        peers = await peer_service.get_client_peers(client_id)
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            user_service = UserService(client_service)
 
-        if not peers:
-            await callback.message.edit_text(
-                "🔑 <b>Мои ключи</b>\n\n"
-                "У вас пока нет активных ключей.\n"
-                "Используйте 🔑 Получить ключ для создания."
-            )
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
+
+            peer_repo = PeerRepository(api_client)
+            peer_service = PeerService(peer_repo)
+
+            client_id = await user_service.get_client_id(telegram_id)
+            peers = await peer_service.get_client_peers(client_id)
+
+            if not peers:
+                await callback.message.edit_text(
+                    "🔑 <b>Мои ключи</b>\n\n"
+                    "У вас пока нет активных ключей.\n"
+                    "Используйте 🔑 Получить ключ для создания."
+                )
+                await callback.answer()
+                return
+
+            keys_text = "🔑 <b>Мои ключи</b>\n\n"
+            for i, peer in enumerate(peers, 1):
+                try:
+                    cluster = await cluster_service.get_cluster(peer.cluster_id)
+                    cluster_name = cluster.name
+                except:
+                    cluster_name = "Неизвестно"
+
+                keys_text += f"{i}. {cluster_name}\n"
+                keys_text += f"   IP: <code>{peer.allocated_ip}</code>\n"
+                keys_text += f"   Создан: {peer.created_at.strftime('%d.%m.%Y')}\n\n"
+
+            await callback.message.edit_text(keys_text)
             await callback.answer()
-            return
-
-        keys_text = "🔑 <b>Мои ключи</b>\n\n"
-        for i, peer in enumerate(peers, 1):
-            try:
-                cluster = await cluster_service.get_cluster(peer.cluster_id)
-                cluster_name = cluster.name
-            except:
-                cluster_name = "Неизвестно"
-
-            keys_text += f"{i}. {cluster_name}\n"
-            keys_text += f"   IP: <code>{peer.allocated_ip}</code>\n"
-            keys_text += f"   Создан: {peer.created_at.strftime('%d.%m.%Y')}\n\n"
-
-        await callback.message.edit_text(keys_text)
-        await callback.answer()
 
     except Exception as e:
         logger.error(f"Error in my_keys_handler: {e}")

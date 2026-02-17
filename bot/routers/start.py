@@ -16,14 +16,6 @@ settings = get_settings()
 agreed_users = set()
 
 
-async def get_user_service():
-    api_client = get_api_client()
-    async with api_client:
-        client_repo = ClientRepository(api_client)
-        client_service = ClientService(client_repo)
-        return UserService(client_service)
-
-
 @router.message(CommandStart())
 async def start_command_handler(message: Message):
     telegram_id = message.from_user.id
@@ -45,21 +37,25 @@ async def agree_to_terms_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
 
     try:
-        user_service = await get_user_service()
+        api_client = get_api_client()
+        async with api_client:
+            client_repo = ClientRepository(api_client)
+            client_service = ClientService(client_repo)
+            user_service = UserService(client_service)
 
-        await user_service.register_user(telegram_id)
-        agreed_users.add(telegram_id)
+            await user_service.register_user(telegram_id)
+            agreed_users.add(telegram_id)
 
-        logger.info(f"User {telegram_id} accepted terms and registered")
+            logger.info(f"User {telegram_id} accepted terms and registered")
 
-        await callback.message.edit_text(
-            "✅ Спасибо! Вы приняли условия использования."
-        )
-        await callback.message.answer(
-            MAIN_MENU_MESSAGE,
-            reply_markup=get_main_menu_keyboard()
-        )
-        await callback.answer()
+            await callback.message.edit_text(
+                "✅ Спасибо! Вы приняли условия использования."
+            )
+            await callback.message.answer(
+                MAIN_MENU_MESSAGE,
+                reply_markup=get_main_menu_keyboard()
+            )
+            await callback.answer()
     except Exception as e:
         logger.error(f"Failed to register user {telegram_id}: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
