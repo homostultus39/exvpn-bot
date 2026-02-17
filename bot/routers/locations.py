@@ -1,7 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from bot.management.dependencies import get_api_client
-from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.entities.cluster.repository import ClusterRepository
@@ -11,9 +10,10 @@ from bot.entities.peer.service import PeerService
 from bot.keyboards.user import get_location_keyboard
 from bot.messages.user import SELECT_LOCATION, KEY_RECEIVED_TEMPLATE, CLIENT_INFO
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
+logger = configure_logger("LOCATIONS_ROUTER", "cyan")
 
 
 @router.message(F.text == "🔑 Получить ключ")
@@ -25,12 +25,11 @@ async def get_key_handler(message: Message):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
 
             cluster_repo = ClusterRepository(api_client)
             cluster_service = ClusterService(cluster_repo)
 
-            if not await user_service.is_registered(telegram_id):
+            if not await client_service.is_registered_by_telegram_id(telegram_id):
                 await message.answer("❌ Вы не зарегистрированы. Используйте /start")
                 return
 
@@ -59,7 +58,6 @@ async def location_selected_handler(callback: CallbackQuery):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
 
             cluster_repo = ClusterRepository(api_client)
             cluster_service = ClusterService(cluster_repo)
@@ -67,7 +65,7 @@ async def location_selected_handler(callback: CallbackQuery):
             peer_repo = PeerRepository(api_client)
             peer_service = PeerService(peer_repo)
 
-            client_id = await user_service.get_client_id(telegram_id)
+            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
 
             try:
                 await client_service.ensure_active_subscription(client_id)

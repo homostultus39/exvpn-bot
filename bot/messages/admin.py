@@ -34,3 +34,22 @@ GENERAL_STATS_TEMPLATE = """📊 <b>Общая статистика</b>
 🌐 Кластеры: {clusters_total} (активных: {clusters_active})
 🔑 Пиры: {peers_total}
 📡 Онлайн: {peers_online}"""
+
+
+TARIFFS_LIST_TEMPLATE = """💳 <b>Тарифы</b>
+
+Всего: {total}
+Активные: {active}
+
+{tariffs_list}"""
+
+
+TARIFF_INFO_TEMPLATE = """💳 <b>Тариф: {name}</b>
+
+🏷 Код: <code>{code}</code>
+📅 Дней: {days}
+💰 Цена (RUB): {price_rub}₽
+⭐ Цена (Stars): {price_stars}
+📊 Статус: {status}
+🔢 Порядок: {sort_order}
+🆔 ID: <code>{id}</code>"""

@@ -1,4 +1,5 @@
 from datetime import datetime
+from bot.management.timezone import now as get_now
 from aiogram import Router, F
 from aiogram.types import Message
 from bot.management.settings import get_settings
@@ -8,9 +9,10 @@ from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.peer.repository import PeerRepository
 from bot.middlewares.admin import AdminMiddleware
 from bot.messages.admin import GENERAL_STATS_TEMPLATE, CLIENTS_STATS_TEMPLATE
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
+logger = configure_logger("ADMIN_STATISTICS", "red")
 router.message.middleware(AdminMiddleware())
 
 settings = get_settings()
@@ -67,7 +69,7 @@ async def clients_stats_handler(message: Message):
             client_repo = ClientRepository(api_client)
             clients = await client_repo.list()
 
-            active_count = sum(1 for c in clients if c.expires_at > datetime.utcnow())
+            active_count = sum(1 for c in clients if c.expires_at > get_now())
             with_keys_count = sum(1 for c in clients if c.peers_count > 0)
 
             text = CLIENTS_STATS_TEMPLATE.format(

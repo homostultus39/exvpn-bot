@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
+from bot.management.timezone import now as get_now
 from typing import Optional
 import httpx
 from bot.core.exceptions import AuthenticationException
@@ -18,7 +19,7 @@ class TokenManager:
     async def get_access_token(self) -> str:
         async with self._lock:
             if self.access_token and self.token_expires_at:
-                if datetime.utcnow() < self.token_expires_at - timedelta(minutes=1):
+                if get_now() < self.token_expires_at - timedelta(minutes=1):
                     return self.access_token
 
             if self.refresh_token:
@@ -47,7 +48,7 @@ class TokenManager:
             data = response.json()
             self.access_token = data["access_token"]
             self.refresh_token = response.cookies.get("refresh_token")
-            self.token_expires_at = datetime.utcnow() + timedelta(minutes=15)
+            self.token_expires_at = get_now() + timedelta(minutes=15)
 
     async def _refresh_tokens(self) -> None:
         async with httpx.AsyncClient() as client:
@@ -67,7 +68,7 @@ class TokenManager:
             new_refresh = response.cookies.get("refresh_token")
             if new_refresh:
                 self.refresh_token = new_refresh
-            self.token_expires_at = datetime.utcnow() + timedelta(minutes=15)
+            self.token_expires_at = get_now() + timedelta(minutes=15)
 
     async def logout(self) -> None:
         if not self.access_token:

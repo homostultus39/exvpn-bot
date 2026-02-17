@@ -6,11 +6,12 @@ from bot.management.dependencies import get_api_client
 from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.middlewares.admin import AdminMiddleware
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
+logger = configure_logger("ADMIN_CLUSTER_CREATE", "red")
 
 
 class ClusterCreateForm(StatesGroup):

@@ -3,15 +3,15 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from bot.management.settings import get_settings
 from bot.management.dependencies import get_api_client
-from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.keyboards.user import get_agreement_keyboard, get_main_menu_keyboard
 from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
 settings = get_settings()
+logger = configure_logger("START_ROUTER", "green")
 
 agreed_users = set()
 
@@ -41,9 +41,8 @@ async def agree_to_terms_handler(callback: CallbackQuery):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
 
-            await user_service.register_user(telegram_id)
+            await client_service.get_or_create_by_telegram_id(telegram_id)
             agreed_users.add(telegram_id)
 
             logger.info(f"User {telegram_id} accepted terms and registered")

@@ -4,6 +4,7 @@ from bot.core.api_client import APIClient
 from bot.entities.client.models import (
     CreateClientRequest,
     UpdateClientRequest,
+    SubscribeRequest,
     ClientResponse,
     ClientWithPeersResponse
 )
@@ -27,6 +28,11 @@ class ClientRepository:
 
     async def update(self, client_id: UUID, request: UpdateClientRequest) -> ClientResponse:
         data = await self.api_client.patch(f"/clients/{client_id}", json=request.model_dump(mode="json"))
+        return ClientResponse(**data)
+
+    async def subscribe(self, client_id: UUID, tariff_code: str) -> ClientResponse:
+        request = SubscribeRequest(tariff_code=tariff_code)
+        data = await self.api_client.post(f"/clients/{client_id}/subscribe", json=request.model_dump(mode="json"))
         return ClientResponse(**data)
 
     async def delete(self, client_id: UUID) -> None:

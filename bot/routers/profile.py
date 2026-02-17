@@ -1,8 +1,8 @@
 from datetime import datetime
+from bot.management.timezone import get_timezone, now as get_now
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from bot.management.dependencies import get_api_client
-from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.entities.cluster.repository import ClusterRepository
@@ -15,9 +15,10 @@ from bot.messages.user import (
     SUBSCRIPTION_ACTIVE_TEMPLATE,
     SUBSCRIPTION_EXPIRED
 )
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
+logger = configure_logger("PROFILE_ROUTER", "magenta")
 
 
 @router.message(F.text == "👤 Профиль")
@@ -30,17 +31,17 @@ async def profile_handler(message: Message):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
 
             peer_repo = PeerRepository(api_client)
             peer_service = PeerService(peer_repo)
 
-            client_id = await user_service.get_client_id(telegram_id)
+            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
             client = await client_service.get_client(client_id)
 
-            if client.expires_at > datetime.utcnow():
+            if client.expires_at > get_now():
+                local_expires_at = client.expires_at.astimezone(get_timezone())
                 subscription_status = SUBSCRIPTION_ACTIVE_TEMPLATE.format(
-                    expires_at=client.expires_at.strftime("%d.%m.%Y %H:%M")
+                    expires_at=local_expires_at.strftime("%d.%m.%Y %H:%M")
                 )
             else:
                 subscription_status = SUBSCRIPTION_EXPIRED
@@ -73,7 +74,6 @@ async def my_keys_handler(callback: CallbackQuery):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
 
             cluster_repo = ClusterRepository(api_client)
             cluster_service = ClusterService(cluster_repo)
@@ -81,7 +81,7 @@ async def my_keys_handler(callback: CallbackQuery):
             peer_repo = PeerRepository(api_client)
             peer_service = PeerService(peer_repo)
 
-            client_id = await user_service.get_client_id(telegram_id)
+            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
             peers = await peer_service.get_client_peers(client_id)
 
             if not peers:

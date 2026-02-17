@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     api_token: str
     admin_ids: str
+    timezone: str = "UTC"
 
     central_api_url: str
     central_api_username: str
@@ -14,14 +14,6 @@ class Settings(BaseSettings):
 
     privacy_policy_url: str
     user_agreement_url: str
-
-    payment_provider: str = "rukassa"
-    rukassa_api_key: Optional[str] = None
-    rukassa_shop_id: Optional[str] = None
-    rukassa_api_url: Optional[str] = None
-
-    yookassa_shop_id: Optional[str] = None
-    yookassa_secret_key: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

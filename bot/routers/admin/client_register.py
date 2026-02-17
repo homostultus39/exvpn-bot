@@ -1,4 +1,5 @@
 from datetime import datetime
+from bot.management.timezone import get_timezone, now as get_now
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -7,11 +8,12 @@ from bot.management.dependencies import get_api_client
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.middlewares.admin import AdminMiddleware
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
+logger = configure_logger("ADMIN_CLIENT_REGISTER", "red")
 
 
 class ClientRegisterForm(StatesGroup):
@@ -64,7 +66,7 @@ async def process_expiration_date(message: Message, state: FSMContext):
         except ValueError:
             expires_at = datetime.strptime(date_str, "%d.%m.%Y")
 
-        if expires_at < datetime.utcnow():
+        if expires_at < get_now():
             await message.answer(
                 "⚠️ Указанная дата уже прошла. Введите будущую дату:\n"
                 "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ"
@@ -82,23 +84,25 @@ async def process_expiration_date(message: Message, state: FSMContext):
 
             existing_client = await client_service.find_by_username(username)
             if existing_client:
+                local_expires = existing_client.expires_at.astimezone(get_timezone())
                 await message.answer(
                     f"⚠️ <b>Клиент уже существует</b>\n\n"
                     f"🆔 ID: <code>{existing_client.id}</code>\n"
                     f"👤 Username: {existing_client.username}\n"
-                    f"📅 Текущая дата истечения: {existing_client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                    f"📅 Текущая дата истечения: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
                     f"Регистрация отменена."
                 )
                 await state.clear()
                 return
 
             client = await client_service.create_client(username, expires_at)
+            local_expires = client.expires_at.astimezone(get_timezone())
 
             await message.answer(
                 f"✅ <b>Клиент зарегистрирован!</b>\n\n"
                 f"👤 Telegram ID: <code>{user_id}</code>\n"
                 f"🆔 Client ID: <code>{client.id}</code>\n"
-                f"📅 Подписка до: {client.expires_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
                 f"Пользователь может начать использовать бота!"
             )
 

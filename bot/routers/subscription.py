@@ -2,16 +2,15 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from bot.management.settings import get_settings
 from bot.management.dependencies import get_api_client
-
-from bot.entities.user.service import UserService
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.entities.subscription.service import SubscriptionService
 from bot.keyboards.user import get_subscription_keyboard
 from bot.messages.user import SUBSCRIPTION_REQUIRED
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
+logger = configure_logger("SUBSCRIPTION_ROUTER", "yellow")
 settings = get_settings()
 
 
@@ -42,10 +41,9 @@ async def buy_subscription_handler(callback: CallbackQuery):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
             subscription_service = SubscriptionService(client_service)
 
-            client_id = await user_service.get_client_id(telegram_id)
+            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
 
             await subscription_service.buy_subscription(client_id, tariff_code)
 
@@ -74,10 +72,9 @@ async def extend_tariff_handler(callback: CallbackQuery):
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
-            user_service = UserService(client_service)
             subscription_service = SubscriptionService(client_service)
 
-            client_id = await user_service.get_client_id(telegram_id)
+            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
 
             await subscription_service.extend_subscription(client_id, tariff_code)
 

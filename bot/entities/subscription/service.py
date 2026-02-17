@@ -1,45 +1,29 @@
 from uuid import UUID
 from bot.entities.client.service import ClientService
-from bot.entities.subscription.models import TARIFFS
+from bot.entities.tariff.service import TariffService
+from bot.entities.tariff.models import TariffResponse
 
 
 class SubscriptionService:
-    def __init__(self, client_service: ClientService):
+    def __init__(self, client_service: ClientService, tariff_service: TariffService):
         self.client_service = client_service
+        self.tariff_service = tariff_service
 
     async def buy_subscription(self, client_id: UUID, tariff_code: str) -> None:
-        if tariff_code == "test":
-            days = 30
-        else:
-            tariff = TARIFFS.get(tariff_code)
-            if not tariff:
-                raise ValueError(f"Invalid tariff code: {tariff_code}")
-            days = tariff.days
-
-        await self.client_service.extend_subscription(client_id, days)
+        await self.client_service.subscribe(client_id, tariff_code)
 
     async def extend_subscription(self, client_id: UUID, tariff_code: str) -> None:
         await self.buy_subscription(client_id, tariff_code)
 
-    def get_tariff_price(self, tariff_code: str, payment_method: str = "rub") -> int:
-        if tariff_code == "test":
-            return 0
+    async def get_tariff_by_code(self, tariff_code: str) -> TariffResponse | None:
+        tariffs_list = await self.tariff_service.get_active_tariffs()
+        for tariff in tariffs_list.tariffs:
+            if tariff.code == tariff_code:
+                return tariff
+        return None
 
-        tariff = TARIFFS.get(tariff_code)
-        if not tariff:
-            raise ValueError(f"Invalid tariff code: {tariff_code}")
+    def get_tariff_price(self, tariff: TariffResponse, payment_method: str = "rub") -> int:
+        return self.tariff_service.get_tariff_price(tariff, payment_method)
 
-        if payment_method == "stars":
-            return tariff.stars
-        else:
-            return tariff.rub
-
-    def get_tariff_days(self, tariff_code: str) -> int:
-        if tariff_code == "test":
-            return 30
-
-        tariff = TARIFFS.get(tariff_code)
-        if not tariff:
-            raise ValueError(f"Invalid tariff code: {tariff_code}")
-
-        return tariff.days
+    def get_tariff_days(self, tariff: TariffResponse) -> int:
+        return self.tariff_service.get_tariff_days(tariff)

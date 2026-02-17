@@ -15,9 +15,11 @@ from bot.routers.admin.cluster_create import router as admin_cluster_create_rout
 from bot.routers.admin.clients import router as admin_clients_router
 from bot.routers.admin.client_register import router as admin_client_register_router
 from bot.routers.admin.statistics import router as admin_statistics_router
-from bot.utils.logger import logger
+from bot.routers.admin.tariffs import router as admin_tariffs_router
+from bot.management.logger import configure_logger
 
 settings = get_settings()
+logger = configure_logger("EXVPN_BOT", "blue")
 
 bot = Bot(
     token=settings.api_token,
@@ -39,6 +41,7 @@ async def start_polling():
     dp.include_router(admin_clients_router)
     dp.include_router(admin_client_register_router)
     dp.include_router(admin_statistics_router)
+    dp.include_router(admin_tariffs_router)
 
     logger.info("Bot starting...")
     await dp.start_polling(bot)

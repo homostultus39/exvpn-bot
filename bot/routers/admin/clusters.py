@@ -8,13 +8,14 @@ from bot.entities.cluster.service import ClusterService
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import get_clusters_keyboard, get_cluster_actions_keyboard
 from bot.messages.admin import CLUSTERS_LIST_TEMPLATE, CLUSTER_INFO_TEMPLATE
-from bot.utils.logger import logger
+from bot.management.logger import configure_logger
 
 router = Router()
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
 
 settings = get_settings()
+logger = configure_logger("ADMIN_CLUSTERS", "red")
 
 
 @router.message(F.text == "🌐 Кластеры")
