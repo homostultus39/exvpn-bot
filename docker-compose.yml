@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   exvpn-bot:
     build:
@@ -10,3 +9,10 @@ services:
       - .env
     volumes:
       - ./bot/data:/app/bot/data
+    networks:
+      - exvpn-network
+
+networks:
+  exvpn-network:
+    name: $$CENTRAL_API_NETWORK_NAME
+    external: true
