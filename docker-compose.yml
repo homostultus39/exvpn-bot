@@ -14,5 +14,5 @@ services:
 
 networks:
   exvpn-network:
-    name: $$CENTRAL_API_NETWORK_NAME
+    name: ${CENTRAL_API_NETWORK_NAME}
     external: true
