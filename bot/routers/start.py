@@ -50,16 +50,17 @@ async def agree_to_terms_handler(callback: CallbackQuery):
 
             await callback.answer("✅ Принято!")
             await callback.message.delete()
-            sent_menu = await callback.message.answer(
-                MAIN_MENU_MESSAGE,
-                reply_markup=get_main_menu_keyboard()
-            )
-            sent_info = await callback.message.answer(CLIENT_INFO)
+
+            chat_id = callback.message.chat.id
             if is_new:
                 sent_trial = await callback.message.answer(TRIAL_MESSAGE)
-                store(callback.message.chat.id, sent_menu.message_id, sent_info.message_id, sent_trial.message_id)
+                sent_info = await callback.message.answer(CLIENT_INFO)
+                sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+                store(chat_id, sent_trial.message_id, sent_info.message_id, sent_menu.message_id)
             else:
-                store(callback.message.chat.id, sent_menu.message_id, sent_info.message_id)
+                sent_info = await callback.message.answer(CLIENT_INFO)
+                sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+                store(chat_id, sent_info.message_id, sent_menu.message_id)
     except Exception as e:
         logger.error(f"Failed to register user {telegram_id}: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
