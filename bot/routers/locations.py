@@ -9,7 +9,7 @@ from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
 from bot.keyboards.user import get_location_keyboard, get_app_type_keyboard, get_main_menu_keyboard, get_back_to_menu_keyboard
-from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE, MAIN_MENU_MESSAGE
+from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE, MAIN_MENU_MESSAGE, CLIENT_INFO
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
@@ -169,8 +169,9 @@ async def generate_key_handler(callback: CallbackQuery):
             await callback.answer("✅ Ключ получен!")
             logger.info(f"User {telegram_id} got key for cluster {cluster.name}, app_type={app_type}")
 
-            sent = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-            store(callback.message.chat.id, sent.message_id)
+            sent_info = await callback.message.answer(CLIENT_INFO)
+            sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+            store(callback.message.chat.id, sent_info.message_id, sent_menu.message_id)
 
     except UserNotRegisteredException:
         await callback.message.edit_text("❌ Вы не зарегистрированы. Используйте /start")

@@ -24,8 +24,9 @@ async def start_command_handler(message: Message):
     if telegram_id in agreed_users:
         await message.delete()
         await delete_last(message.bot, message.chat.id)
-        sent = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-        store(message.chat.id, sent.message_id)
+        sent_info = await message.answer(CLIENT_INFO)
+        sent_menu = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+        store(message.chat.id, sent_info.message_id, sent_menu.message_id)
     else:
         await message.answer(
             WELCOME_MESSAGE,
@@ -69,9 +70,8 @@ async def agree_to_terms_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_handler(callback: CallbackQuery):
     await callback.message.delete()
-    sent = await callback.message.answer(
-        MAIN_MENU_MESSAGE,
-        reply_markup=get_main_menu_keyboard()
-    )
-    store(callback.message.chat.id, sent.message_id)
+    chat_id = callback.message.chat.id
+    sent_info = await callback.message.answer(CLIENT_INFO)
+    sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+    store(chat_id, sent_info.message_id, sent_menu.message_id)
     await callback.answer()

@@ -14,7 +14,8 @@ from bot.messages.user import (
     PROFILE_MESSAGE_TEMPLATE,
     SUBSCRIPTION_ACTIVE_TEMPLATE,
     SUBSCRIPTION_EXPIRED,
-    MAIN_MENU_MESSAGE
+    MAIN_MENU_MESSAGE,
+    CLIENT_INFO
 )
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
@@ -124,8 +125,9 @@ async def my_keys_handler(callback: CallbackQuery):
                 else:
                     await callback.message.answer(f"⚠️ Конфиг для {cluster_name} ({app_type_label}) пока не готов")
 
-            sent = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-            store(callback.message.chat.id, sent.message_id)
+            sent_info = await callback.message.answer(CLIENT_INFO)
+            sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+            store(callback.message.chat.id, sent_info.message_id, sent_menu.message_id)
 
     except Exception as e:
         logger.error(f"Error in my_keys_handler: {e}")
