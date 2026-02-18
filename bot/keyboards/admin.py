@@ -16,7 +16,7 @@ def get_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
         status_emoji = "✅" if cluster.is_active else "❌"
         buttons.append([InlineKeyboardButton(
             text=f"{status_emoji} {cluster.name}",
-            callback_data=f"admin_cluster_{cluster.id}"
+            callback_data=f"admin_cluster_view_{cluster.id}"
         )])
     buttons.append([InlineKeyboardButton(
         text="➕ Создать кластер",
@@ -63,7 +63,7 @@ def get_tariffs_keyboard(tariffs: list) -> InlineKeyboardMarkup:
         status_emoji = "✅" if tariff.is_active else "❌"
         buttons.append([InlineKeyboardButton(
             text=f"{status_emoji} {tariff.name} ({tariff.code})",
-            callback_data=f"admin_tariff_{tariff.id}"
+            callback_data=f"admin_tariff_view_{tariff.id}"
         )])
     buttons.append([InlineKeyboardButton(
         text="➕ Создать тариф",

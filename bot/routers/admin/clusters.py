@@ -51,9 +51,9 @@ async def clusters_list_handler(message: Message):
         await message.answer("❌ Произошла ошибка при загрузке кластеров")
 
 
-@router.callback_query(F.data.startswith("admin_cluster_") & ~F.data.contains("restart") & ~F.data.contains("back"))
+@router.callback_query(F.data.startswith("admin_cluster_view_"))
 async def cluster_info_handler(callback: CallbackQuery):
-    cluster_id = callback.data.split("_")[2]
+    cluster_id = callback.data.removeprefix("admin_cluster_view_")
 
     try:
         api_client = get_api_client()

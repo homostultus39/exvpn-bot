@@ -63,9 +63,9 @@ async def tariffs_list_handler(message: Message):
         await message.answer("❌ Произошла ошибка при загрузке тарифов")
 
 
-@router.callback_query(F.data.startswith("admin_tariff_") & ~F.data.contains("toggle") & ~F.data.contains("delete") & ~F.data.contains("edit") & ~F.data.contains("back") & ~F.data.contains("refresh") & ~F.data.contains("create"))
+@router.callback_query(F.data.startswith("admin_tariff_view_"))
 async def tariff_info_handler(callback: CallbackQuery):
-    tariff_id = callback.data.split("_")[2]
+    tariff_id = callback.data.removeprefix("admin_tariff_view_")
 
     try:
         api_client = get_api_client()

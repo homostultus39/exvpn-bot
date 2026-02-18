@@ -1,3 +1,4 @@
+import re
 from uuid import UUID
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
@@ -8,14 +9,22 @@ from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
-from bot.keyboards.user import get_location_keyboard, get_app_type_keyboard
-from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE
+from bot.keyboards.user import get_location_keyboard, get_app_type_keyboard, get_main_menu_keyboard
+from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE, MAIN_MENU_MESSAGE
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
 
 router = Router()
 logger = configure_logger("LOCATIONS_ROUTER", "cyan")
+
+
+def _clean_cluster_name(name: str) -> str:
+    name = re.sub(r"[^\w\s-]", "", name, flags=re.UNICODE)
+    name = name.encode("ascii", "ignore").decode("ascii")
+    name = re.sub(r"\s+", "_", name.strip()).lower()
+    name = re.sub(r"_+", "_", name).strip("_")
+    return name or "cluster"
 
 
 @router.message(F.text == "🔑 Получить ключ")
@@ -146,11 +155,14 @@ async def generate_key_handler(callback: CallbackQuery):
             await callback.message.delete()
             clear(callback.message.chat.id)
 
+            app_suffix = app_type.split("_")[-1]
+            clean_name = _clean_cluster_name(cluster.name)
+
             if peer.config:
                 config_bytes = peer.config.encode("utf-8")
                 config_file = BufferedInputFile(
                     config_bytes,
-                    filename=f"exvpn_{cluster.name}_{app_type}.conf"
+                    filename=f"{clean_name}_amnezia_{app_suffix}.conf"
                 )
                 await callback.message.answer_document(
                     document=config_file,
@@ -163,6 +175,9 @@ async def generate_key_handler(callback: CallbackQuery):
 
             await callback.answer("✅ Ключ получен!")
             logger.info(f"User {telegram_id} got key for cluster {cluster.name}, app_type={app_type}")
+
+            sent = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+            store(callback.message.chat.id, sent.message_id)
 
     except UserNotRegisteredException:
         await callback.message.edit_text("❌ Вы не зарегистрированы. Используйте /start")
