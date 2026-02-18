@@ -11,11 +11,6 @@ class CreatePeerRequest(BaseModel):
     cluster_id: UUID
     client_id: UUID
     app_type: AppType
-    protocol: str
-
-
-class UpdatePeerRequest(BaseModel):
-    app_type: Optional[AppType] = None
     protocol: Optional[str] = None
 
 

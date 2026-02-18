@@ -140,7 +140,6 @@ async def generate_key_handler(callback: CallbackQuery):
                 client_id=client_id,
                 cluster_id=cluster_uuid,
                 app_type=app_type,
-                protocol="wireguard"
             )
 
             caption = KEY_RECEIVED_TEMPLATE.format(

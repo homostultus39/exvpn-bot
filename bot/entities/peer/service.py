@@ -12,9 +12,8 @@ class PeerService:
         client_id: UUID,
         cluster_id: UUID,
         app_type: AppType = "amnezia_wg",
-        protocol: str = "wireguard"
     ) -> PeerResponse:
-        existing = await self.repository.find_by_client_and_cluster(client_id, cluster_id)
+        existing = await self.repository.find_by_client_cluster_apptype(client_id, cluster_id, app_type)
         if existing:
             return existing
 
@@ -22,7 +21,6 @@ class PeerService:
             cluster_id=cluster_id,
             client_id=client_id,
             app_type=app_type,
-            protocol=protocol
         )
         return await self.repository.create(request)
 
