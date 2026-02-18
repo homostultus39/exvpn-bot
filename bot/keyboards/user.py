@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from bot.management.settings import Settings
 from bot.entities.cluster.models import ClusterWithStatusResponse
+from bot.entities.tariff.models import TariffResponse
 
 
 def get_agreement_keyboard(settings: Settings) -> InlineKeyboardMarkup:
@@ -62,34 +63,18 @@ def get_app_type_keyboard(cluster_id: str, cluster_name: str) -> InlineKeyboardM
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_subscription_keyboard(is_extension: bool = False) -> InlineKeyboardMarkup:
+def get_subscription_keyboard(tariffs: list[TariffResponse], is_extension: bool = False) -> InlineKeyboardMarkup:
     prefix = "extend_" if is_extension else "buy_"
-    buttons = [
-        [InlineKeyboardButton(
-            text="1 месяц (48 ⭐ / 90 RUB)",
-            callback_data=f"{prefix}30"
-        )],
-        [InlineKeyboardButton(
-            text="3 месяца (136 ⭐ / 256 RUB)",
-            callback_data=f"{prefix}90"
-        )],
-        [InlineKeyboardButton(
-            text="6 месяцев (266 ⭐ / 502 RUB)",
-            callback_data=f"{prefix}180"
-        )],
-        [InlineKeyboardButton(
-            text="1 год (515 ⭐ / 972 RUB)",
-            callback_data=f"{prefix}360"
-        )],
-        [InlineKeyboardButton(
-            text="🧪 Тестовая подписка (для дебага)",
-            callback_data=f"{prefix}test"
-        )],
-        [InlineKeyboardButton(
-            text="◀️ Назад",
-            callback_data="back_to_menu"
-        )]
-    ]
+    buttons = []
+    for tariff in tariffs:
+        buttons.append([InlineKeyboardButton(
+            text=f"{tariff.name} ({tariff.price_stars} ⭐ / {tariff.price_rub} ₽)",
+            callback_data=f"{prefix}{tariff.code}"
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад",
+        callback_data="back_to_menu"
+    )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

@@ -37,5 +37,5 @@ class TariffResponse(BaseModel):
 
 
 class TariffsListResponse(BaseModel):
-    subscription_enabled: bool
+    enabled: bool
     tariffs: list[TariffResponse]
