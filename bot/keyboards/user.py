@@ -35,12 +35,30 @@ def get_location_keyboard(clusters: list[ClusterWithStatusResponse]) -> InlineKe
     for cluster in clusters:
         buttons.append([InlineKeyboardButton(
             text=cluster.name,
-            callback_data=f"location_{cluster.id}"
+            callback_data=f"loc:{cluster.id}"
         )])
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад",
         callback_data="back_to_menu"
     )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_app_type_keyboard(cluster_id: str, cluster_name: str) -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(
+            text="AmneziaVPN",
+            callback_data=f"key:{cluster_id}:amnezia_vpn"
+        )],
+        [InlineKeyboardButton(
+            text="AmneziaWG",
+            callback_data=f"key:{cluster_id}:amnezia_wg"
+        )],
+        [InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back_to_locations"
+        )],
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

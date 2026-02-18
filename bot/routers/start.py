@@ -22,10 +22,10 @@ async def start_command_handler(message: Message):
     telegram_id = message.from_user.id
 
     if telegram_id in agreed_users:
-        await message.answer(
-            MAIN_MENU_MESSAGE,
-            reply_markup=get_main_menu_keyboard()
-        )
+        await message.delete()
+        await delete_last(message.bot, message.chat.id)
+        sent = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+        store(message.chat.id, sent.message_id)
     else:
         await message.answer(
             WELCOME_MESSAGE,
@@ -48,18 +48,18 @@ async def agree_to_terms_handler(callback: CallbackQuery):
 
             logger.info(f"User {telegram_id} accepted terms and registered (new={is_new})")
 
-            await callback.message.edit_text(
-                "✅ Спасибо! Вы приняли условия использования."
-            )
-            await callback.message.answer(
+            await callback.answer("✅ Принято!")
+            await callback.message.delete()
+            sent_menu = await callback.message.answer(
                 MAIN_MENU_MESSAGE,
                 reply_markup=get_main_menu_keyboard()
             )
-            sent = await callback.message.answer(CLIENT_INFO)
+            sent_info = await callback.message.answer(CLIENT_INFO)
             if is_new:
-                sent = await callback.message.answer(TRIAL_MESSAGE)
-            store(callback.message.chat.id, sent.message_id)
-            await callback.answer()
+                sent_trial = await callback.message.answer(TRIAL_MESSAGE)
+                store(callback.message.chat.id, sent_menu.message_id, sent_info.message_id, sent_trial.message_id)
+            else:
+                store(callback.message.chat.id, sent_menu.message_id, sent_info.message_id)
     except Exception as e:
         logger.error(f"Failed to register user {telegram_id}: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)

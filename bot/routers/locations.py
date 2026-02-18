@@ -1,3 +1,4 @@
+from uuid import UUID
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from bot.management.dependencies import get_api_client
@@ -7,11 +8,11 @@ from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
-from bot.keyboards.user import get_location_keyboard
-from bot.messages.user import SELECT_LOCATION, KEY_RECEIVED_TEMPLATE, CLIENT_INFO
+from bot.keyboards.user import get_location_keyboard, get_app_type_keyboard
+from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
 from bot.management.logger import configure_logger
-from bot.management.message_tracker import store, delete_last
+from bot.management.message_tracker import store, delete_last, clear
 
 router = Router()
 logger = configure_logger("LOCATIONS_ROUTER", "cyan")
@@ -53,10 +54,54 @@ async def get_key_handler(message: Message):
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
-@router.callback_query(F.data.startswith("location_"))
+@router.callback_query(F.data.startswith("loc:"))
 async def location_selected_handler(callback: CallbackQuery):
+    cluster_id = callback.data.split(":", 1)[1]
+
+    try:
+        api_client = get_api_client()
+        async with api_client:
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
+
+            cluster = await cluster_service.get_cluster(UUID(cluster_id))
+
+            await callback.message.edit_text(
+                SELECT_APP_TYPE.format(cluster_name=cluster.name),
+                reply_markup=get_app_type_keyboard(cluster_id, cluster.name)
+            )
+            await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in location_selected_handler: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "back_to_locations")
+async def back_to_locations_handler(callback: CallbackQuery):
+    try:
+        api_client = get_api_client()
+        async with api_client:
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
+
+            clusters = await cluster_service.get_active_clusters()
+
+            await callback.message.edit_text(
+                SELECT_LOCATION,
+                reply_markup=get_location_keyboard(clusters)
+            )
+            await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in back_to_locations_handler: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("key:"))
+async def generate_key_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
-    cluster_id = callback.data.split("_")[1]
+    _, cluster_id, app_type = callback.data.split(":")
+
+    app_type_label = "AmneziaVPN" if app_type == "amnezia_vpn" else "AmneziaWG"
 
     try:
         api_client = get_api_client()
@@ -83,44 +128,45 @@ async def location_selected_handler(callback: CallbackQuery):
                 await callback.answer()
                 return
 
-            from uuid import UUID
             cluster_uuid = UUID(cluster_id)
             cluster = await cluster_service.get_cluster(cluster_uuid)
 
             peer = await peer_service.get_or_create_peer(
                 client_id=client_id,
                 cluster_id=cluster_uuid,
-                app_type="amnezia_wg",
+                app_type=app_type,
                 protocol="wireguard"
             )
 
-            if peer.config:
-                config_bytes = peer.config.encode('utf-8')
-                config_file = BufferedInputFile(config_bytes, filename=f"exvpn_{cluster.name}.conf")
+            caption = KEY_RECEIVED_TEMPLATE.format(
+                location=cluster.name,
+                app_type=app_type_label
+            )
 
+            await callback.message.delete()
+            clear(callback.message.chat.id)
+
+            if peer.config:
+                config_bytes = peer.config.encode("utf-8")
+                config_file = BufferedInputFile(
+                    config_bytes,
+                    filename=f"exvpn_{cluster.name}_{app_type}.conf"
+                )
                 await callback.message.answer_document(
                     document=config_file,
-                    caption=KEY_RECEIVED_TEMPLATE.format(
-                        CLIENT_INFO,
-                        location=cluster.name,
-                        app_type="AmneziaWG"
-                    )
+                    caption=caption
                 )
             else:
                 await callback.message.answer(
-                    KEY_RECEIVED_TEMPLATE.format(
-                        CLIENT_INFO,
-                        location=cluster.name,
-                        app_type="AmneziaWG"
-                    ) + "\n\n⚠️ Конфиг пока не готов. Попробуйте через минуту."
+                    caption + "\n\n⚠️ Конфиг пока не готов. Попробуйте через минуту."
                 )
 
             await callback.answer("✅ Ключ получен!")
-            logger.info(f"User {telegram_id} got key for cluster {cluster.name}")
+            logger.info(f"User {telegram_id} got key for cluster {cluster.name}, app_type={app_type}")
 
     except UserNotRegisteredException:
         await callback.message.edit_text("❌ Вы не зарегистрированы. Используйте /start")
         await callback.answer()
     except Exception as e:
-        logger.error(f"Error in location_selected_handler: {e}")
+        logger.error(f"Error in generate_key_handler: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
