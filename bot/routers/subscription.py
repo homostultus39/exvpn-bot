@@ -6,7 +6,7 @@ from bot.entities.client.service import ClientService
 from bot.entities.tariff.repository import TariffRepository
 from bot.entities.tariff.service import TariffService
 from bot.entities.subscription.service import SubscriptionService
-from bot.keyboards.user import get_subscription_keyboard
+from bot.keyboards.user import get_subscription_keyboard, get_back_to_menu_keyboard
 from bot.messages.user import SUBSCRIPTION_REQUIRED
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
@@ -29,7 +29,8 @@ async def subscription_menu_handler(message: Message):
 
             if not tariffs_response.enabled or not tariffs_response.tariffs:
                 sent = await message.answer(
-                    "⚠️ <b>Подписки временно недоступны</b>\n\nОбратитесь к администратору."
+                    "⚠️ <b>Подписки временно недоступны</b>\n\nОбратитесь к администратору.",
+                    reply_markup=get_back_to_menu_keyboard()
                 )
                 store(message.chat.id, sent.message_id)
                 return

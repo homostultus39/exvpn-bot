@@ -78,6 +78,12 @@ def get_subscription_keyboard(tariffs: list[TariffResponse], is_extension: bool 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="◀️ В главное меню", callback_data="back_to_menu")
+    ]])
+
+
 def get_profile_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(

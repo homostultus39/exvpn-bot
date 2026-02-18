@@ -1,7 +1,7 @@
 from datetime import datetime
 from bot.management.timezone import get_timezone, now as get_now
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from bot.management.dependencies import get_api_client
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
@@ -9,14 +9,15 @@ from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.entities.peer.repository import PeerRepository
 from bot.entities.peer.service import PeerService
-from bot.keyboards.user import get_profile_keyboard
+from bot.keyboards.user import get_profile_keyboard, get_main_menu_keyboard, get_back_to_menu_keyboard
 from bot.messages.user import (
     PROFILE_MESSAGE_TEMPLATE,
     SUBSCRIPTION_ACTIVE_TEMPLATE,
-    SUBSCRIPTION_EXPIRED
+    SUBSCRIPTION_EXPIRED,
+    MAIN_MENU_MESSAGE
 )
 from bot.management.logger import configure_logger
-from bot.management.message_tracker import store, delete_last
+from bot.management.message_tracker import store, delete_last, clear
 
 router = Router()
 logger = configure_logger("PROFILE_ROUTER", "magenta")
@@ -74,6 +75,9 @@ async def profile_handler(message: Message):
 async def my_keys_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
 
+    await callback.message.delete()
+    clear(callback.message.chat.id)
+
     try:
         api_client = get_api_client()
         async with api_client:
@@ -90,29 +94,39 @@ async def my_keys_handler(callback: CallbackQuery):
             peers = await peer_service.get_client_peers(client_id)
 
             if not peers:
-                await callback.message.edit_text(
+                await callback.message.answer(
                     "🔑 <b>Мои ключи</b>\n\n"
                     "У вас пока нет активных ключей.\n"
-                    "Используйте 🔑 Получить ключ для создания."
+                    "Используйте 🔑 Получить ключ для создания.",
+                    reply_markup=get_back_to_menu_keyboard()
                 )
                 await callback.answer()
                 return
 
-            keys_text = "🔑 <b>Мои ключи</b>\n\n"
-            for i, peer in enumerate(peers, 1):
+            await callback.answer()
+
+            for peer in peers:
                 try:
                     cluster = await cluster_service.get_cluster(peer.cluster_id)
                     cluster_name = cluster.name
-                except:
+                except Exception:
                     cluster_name = "Неизвестно"
 
-                keys_text += f"{i}. {cluster_name}\n"
-                keys_text += f"   IP: <code>{peer.allocated_ip}</code>\n"
-                keys_text += f"   Создан: {peer.created_at.strftime('%d.%m.%Y')}\n\n"
+                app_type_label = "AmneziaVPN" if peer.app_type == "amnezia_vpn" else "AmneziaWG"
+                caption = f"🌍 {cluster_name}\n📱 {app_type_label}"
 
-            await callback.message.edit_text(keys_text)
-            await callback.answer()
+                fresh_peer = await peer_repo.get(peer.id)
+                if fresh_peer.config:
+                    config_bytes = fresh_peer.config.encode("utf-8")
+                    filename = f"amnezia_{peer.app_type.split('_')[-1]}.conf"
+                    config_file = BufferedInputFile(config_bytes, filename=filename)
+                    await callback.message.answer_document(document=config_file, caption=caption)
+                else:
+                    await callback.message.answer(f"⚠️ Конфиг для {cluster_name} ({app_type_label}) пока не готов")
+
+            sent = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+            store(callback.message.chat.id, sent.message_id)
 
     except Exception as e:
         logger.error(f"Error in my_keys_handler: {e}")
-        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+        await callback.message.answer("❌ Произошла ошибка. Попробуйте позже.")
