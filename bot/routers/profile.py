@@ -16,6 +16,7 @@ from bot.messages.user import (
     SUBSCRIPTION_EXPIRED
 )
 from bot.management.logger import configure_logger
+from bot.management.message_tracker import store, delete_last
 
 router = Router()
 logger = configure_logger("PROFILE_ROUTER", "magenta")
@@ -25,6 +26,9 @@ logger = configure_logger("PROFILE_ROUTER", "magenta")
 async def profile_handler(message: Message):
     telegram_id = message.from_user.id
     username = message.from_user.username or f"user_{telegram_id}"
+
+    await message.delete()
+    await delete_last(message.bot, message.chat.id)
 
     try:
         api_client = get_api_client()
@@ -55,10 +59,11 @@ async def profile_handler(message: Message):
                 peers_count=len(peers)
             )
 
-            await message.answer(
+            sent = await message.answer(
                 profile_text,
                 reply_markup=get_profile_keyboard()
             )
+            store(message.chat.id, sent.message_id)
 
     except Exception as e:
         logger.error(f"Error in profile_handler: {e}")

@@ -8,6 +8,7 @@ from bot.entities.subscription.service import SubscriptionService
 from bot.keyboards.user import get_subscription_keyboard
 from bot.messages.user import SUBSCRIPTION_REQUIRED
 from bot.management.logger import configure_logger
+from bot.management.message_tracker import store, delete_last
 
 router = Router()
 logger = configure_logger("SUBSCRIPTION_ROUTER", "yellow")
@@ -16,10 +17,13 @@ settings = get_settings()
 
 @router.message(F.text == "💎 Подписка")
 async def subscription_menu_handler(message: Message):
-    await message.answer(
+    await message.delete()
+    await delete_last(message.bot, message.chat.id)
+    sent = await message.answer(
         SUBSCRIPTION_REQUIRED,
         reply_markup=get_subscription_keyboard(is_extension=False)
     )
+    store(message.chat.id, sent.message_id)
 
 
 @router.callback_query(F.data == "extend_subscription")

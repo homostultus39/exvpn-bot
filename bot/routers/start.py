@@ -6,8 +6,9 @@ from bot.management.dependencies import get_api_client
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.keyboards.user import get_agreement_keyboard, get_main_menu_keyboard
-from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO
+from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO, TRIAL_MESSAGE
 from bot.management.logger import configure_logger
+from bot.management.message_tracker import store, delete_last
 
 router = Router()
 settings = get_settings()
@@ -27,7 +28,7 @@ async def start_command_handler(message: Message):
         )
     else:
         await message.answer(
-            WELCOME_MESSAGE.format(CLIENT_INFO),
+            WELCOME_MESSAGE,
             reply_markup=get_agreement_keyboard(settings)
         )
 
@@ -42,10 +43,10 @@ async def agree_to_terms_handler(callback: CallbackQuery):
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
 
-            await client_service.get_or_create_by_telegram_id(telegram_id)
+            _, is_new = await client_service.get_or_create_by_telegram_id(telegram_id)
             agreed_users.add(telegram_id)
 
-            logger.info(f"User {telegram_id} accepted terms and registered")
+            logger.info(f"User {telegram_id} accepted terms and registered (new={is_new})")
 
             await callback.message.edit_text(
                 "✅ Спасибо! Вы приняли условия использования."
@@ -54,6 +55,10 @@ async def agree_to_terms_handler(callback: CallbackQuery):
                 MAIN_MENU_MESSAGE,
                 reply_markup=get_main_menu_keyboard()
             )
+            sent = await callback.message.answer(CLIENT_INFO)
+            if is_new:
+                sent = await callback.message.answer(TRIAL_MESSAGE)
+            store(callback.message.chat.id, sent.message_id)
             await callback.answer()
     except Exception as e:
         logger.error(f"Failed to register user {telegram_id}: {e}")
@@ -62,9 +67,10 @@ async def agree_to_terms_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_handler(callback: CallbackQuery):
-    await callback.message.edit_text(MAIN_MENU_MESSAGE)
-    await callback.message.answer(
+    await callback.message.delete()
+    sent = await callback.message.answer(
         MAIN_MENU_MESSAGE,
         reply_markup=get_main_menu_keyboard()
     )
+    store(callback.message.chat.id, sent.message_id)
     await callback.answer()

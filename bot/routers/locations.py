@@ -11,6 +11,7 @@ from bot.keyboards.user import get_location_keyboard
 from bot.messages.user import SELECT_LOCATION, KEY_RECEIVED_TEMPLATE, CLIENT_INFO
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
 from bot.management.logger import configure_logger
+from bot.management.message_tracker import store, delete_last
 
 router = Router()
 logger = configure_logger("LOCATIONS_ROUTER", "cyan")
@@ -19,6 +20,9 @@ logger = configure_logger("LOCATIONS_ROUTER", "cyan")
 @router.message(F.text == "🔑 Получить ключ")
 async def get_key_handler(message: Message):
     telegram_id = message.from_user.id
+
+    await message.delete()
+    await delete_last(message.bot, message.chat.id)
 
     try:
         api_client = get_api_client()
@@ -39,10 +43,11 @@ async def get_key_handler(message: Message):
                 await message.answer("❌ Нет доступных регионов. Обратитесь к администратору.")
                 return
 
-            await message.answer(
+            sent = await message.answer(
                 SELECT_LOCATION,
                 reply_markup=get_location_keyboard(clusters)
             )
+            store(message.chat.id, sent.message_id)
     except Exception as e:
         logger.error(f"Error in get_key_handler: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")

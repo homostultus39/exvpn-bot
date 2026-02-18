@@ -33,12 +33,13 @@ class ClientService:
     async def find_by_username(self, username: str) -> ClientWithPeersResponse | None:
         return await self.repository.find_by_username(username)
 
-    async def get_or_create_by_telegram_id(self, telegram_id: int) -> ClientResponse:
+    async def get_or_create_by_telegram_id(self, telegram_id: int) -> tuple[ClientResponse, bool]:
         username = str(telegram_id)
         client = await self.repository.find_by_username(username)
-        if not client:
-            client = await self.create_client(username)
-        return client
+        if client:
+            return client, False
+        client = await self.create_client(username)
+        return client, True
 
     async def get_client_id_by_telegram_id(self, telegram_id: int) -> UUID:
         username = str(telegram_id)
