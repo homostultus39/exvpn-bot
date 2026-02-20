@@ -1,6 +1,8 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 from bot.middlewares.admin import AdminMiddleware
+from bot.management.fsm_utils import cancel_active_fsm
 from bot.keyboards.admin import get_clients_keyboard
 
 router = Router()
@@ -9,7 +11,8 @@ router.callback_query.middleware(AdminMiddleware())
 
 
 @router.message(F.text == "👥 Клиенты")
-async def clients_menu_handler(message: Message):
+async def clients_menu_handler(message: Message, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
     await message.answer(
         "👥 <b>Управление клиентами</b>\n\n"
         "Выберите действие:",

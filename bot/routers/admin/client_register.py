@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from bot.management.dependencies import get_api_client
+from bot.management.fsm_utils import cancel_active_fsm
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.middlewares.admin import AdminMiddleware
@@ -53,7 +54,9 @@ async def cancel_client_register(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "admin_register_client")
-async def start_client_register(callback: CallbackQuery, state: FSMContext):
+async def start_client_register(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
+    await callback.message.delete()
     msg = await callback.message.answer(
         "👤 <b>Регистрация клиента</b>\n\n"
         "Шаг 1/2: Введите Telegram ID пользователя\n"
@@ -67,13 +70,16 @@ async def start_client_register(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ClientRegisterForm.waiting_for_user_id)
 async def process_user_id(message: Message, state: FSMContext, bot: Bot):
+    text = message.text
+    await message.delete()
+    data = await state.get_data()
+
     try:
-        user_id = int(message.text.strip())
+        user_id = int(text.strip())
         if user_id <= 0:
             raise ValueError("User ID must be positive")
 
         await state.update_data(user_id=user_id)
-        data = await state.get_data()
         await _edit_prompt(
             bot, data,
             "👤 <b>Регистрация клиента</b>\n\n"
@@ -84,9 +90,13 @@ async def process_user_id(message: Message, state: FSMContext, bot: Bot):
         )
         await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
     except ValueError:
-        await message.answer(
-            "❌ Некорректный Telegram ID. Введите положительное число.\n"
-            "Попробуйте ещё раз:"
+        await _edit_prompt(
+            bot, data,
+            "👤 <b>Регистрация клиента</b>\n\n"
+            "Шаг 1/2: Введите Telegram ID пользователя\n"
+            "(Например: 123456789)\n\n"
+            "❌ Некорректный ID. Введите положительное число:",
+            get_fsm_keyboard(PREFIX, back=False)
         )
 
 
@@ -104,6 +114,8 @@ async def cr_back_to_user_id(callback: CallbackQuery, state: FSMContext):
 @router.message(ClientRegisterForm.waiting_for_expiration_date)
 async def process_expiration_date(message: Message, state: FSMContext, bot: Bot):
     date_str = message.text.strip()
+    await message.delete()
+    data = await state.get_data()
 
     try:
         try:
@@ -112,13 +124,16 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             expires_at = datetime.strptime(date_str, "%d.%m.%Y")
 
         if expires_at < get_now():
-            await message.answer(
-                "⚠️ Указанная дата уже прошла. Введите будущую дату:\n"
-                "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ"
+            await _edit_prompt(
+                bot, data,
+                "👤 <b>Регистрация клиента</b>\n\n"
+                "Шаг 2/2: Введите дату истечения подписки\n"
+                "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
+                "⚠️ Указанная дата уже прошла. Введите будущую дату:",
+                get_fsm_keyboard(PREFIX, back=True)
             )
             return
 
-        data = await state.get_data()
         user_id = data["user_id"]
 
         api_client = get_api_client()
@@ -155,20 +170,20 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             reply_markup=get_admin_menu_keyboard()
         )
         logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
+        await state.clear()
 
     except ValueError:
-        await message.answer(
-            "❌ Некорректный формат даты. Используйте:\n"
-            "ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
-            "Примеры:\n"
-            "• 31.12.2026\n"
-            "• 31.12.2026 23:59\n\n"
-            "Попробуйте ещё раз:"
+        await _edit_prompt(
+            bot, data,
+            "👤 <b>Регистрация клиента</b>\n\n"
+            "Шаг 2/2: Введите дату истечения подписки\n"
+            "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
+            "❌ Некорректный формат. Примеры: 31.12.2026 или 31.12.2026 23:59\n"
+            "Попробуйте ещё раз:",
+            get_fsm_keyboard(PREFIX, back=True)
         )
-        return
     except Exception as e:
         logger.error(f"Error registering client: {e}")
-        data = await state.get_data()
         await _delete_prompt(bot, data)
         await message.answer(
             f"❌ Ошибка при регистрации клиента:\n\n"
@@ -176,5 +191,4 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             f"Проверьте данные и попробуйте снова через /admin",
             reply_markup=get_admin_menu_keyboard()
         )
-
-    await state.clear()
+        await state.clear()

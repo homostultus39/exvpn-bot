@@ -1,10 +1,10 @@
 from aiogram import Router, F, Bot
-from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from bot.management.dependencies import get_api_client
+from bot.management.fsm_utils import cancel_active_fsm
 from bot.entities.client.repository import ClientRepository
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import get_admin_menu_keyboard
@@ -34,8 +34,9 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
-@router.message(Command("broadcast"))
-async def broadcast_start(message: Message, state: FSMContext):
+@router.message(F.text == "📢 Рассылка")
+async def broadcast_start(message: Message, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
     msg = await message.answer(
         "📢 <b>Рассылка сообщений</b>\n\n"
         "Введите текст для рассылки всем пользователям:",
@@ -57,6 +58,7 @@ async def broadcast_cancel(callback: CallbackQuery, state: FSMContext):
 async def broadcast_text_received(message: Message, state: FSMContext, bot: Bot):
     await state.update_data(broadcast_text=message.text)
     data = await state.get_data()
+    await message.delete()
 
     try:
         await bot.edit_message_text(

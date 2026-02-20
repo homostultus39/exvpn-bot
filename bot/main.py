@@ -36,7 +36,6 @@ async def setup_commands() -> None:
     admin_commands = [
         BotCommand(command="start", description="Запустить бота"),
         BotCommand(command="admin", description="Открыть админ-панель"),
-        BotCommand(command="broadcast", description="Рассылка пользователям"),
     ]
 
     await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())

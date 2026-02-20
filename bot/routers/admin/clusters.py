@@ -1,8 +1,10 @@
 from uuid import UUID
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 from bot.management.settings import get_settings
 from bot.management.dependencies import get_api_client
+from bot.management.fsm_utils import cancel_active_fsm
 from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.middlewares.admin import AdminMiddleware
@@ -19,7 +21,8 @@ logger = configure_logger("ADMIN_CLUSTERS", "red")
 
 
 @router.message(F.text == "🌐 Кластеры")
-async def clusters_list_handler(message: Message):
+async def clusters_list_handler(message: Message, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
     try:
         api_client = get_api_client()
         async with api_client:

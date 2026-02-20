@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from bot.management.dependencies import get_api_client
+from bot.management.fsm_utils import cancel_active_fsm
 from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.cluster.service import ClusterService
 from bot.middlewares.admin import AdminMiddleware
@@ -52,7 +53,9 @@ async def cancel_cluster_create(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "admin_create_cluster")
-async def start_cluster_create(callback: CallbackQuery, state: FSMContext):
+async def start_cluster_create(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
+    await callback.message.delete()
     msg = await callback.message.answer(
         "➕ <b>Создание кластера</b>\n\n"
         "Шаг 1/3: Введите название кластера\n"
@@ -66,7 +69,9 @@ async def start_cluster_create(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ClusterCreateForm.waiting_for_name)
 async def process_cluster_name(message: Message, state: FSMContext, bot: Bot):
-    await state.update_data(name=message.text)
+    name = message.text
+    await message.delete()
+    await state.update_data(name=name)
     data = await state.get_data()
     await _edit_prompt(
         bot, data,
@@ -91,7 +96,9 @@ async def cc_back_to_name(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ClusterCreateForm.waiting_for_endpoint)
 async def process_cluster_endpoint(message: Message, state: FSMContext, bot: Bot):
-    await state.update_data(endpoint=message.text)
+    endpoint = message.text
+    await message.delete()
+    await state.update_data(endpoint=endpoint)
     data = await state.get_data()
     await _edit_prompt(
         bot, data,
@@ -116,7 +123,9 @@ async def cc_back_to_endpoint(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ClusterCreateForm.waiting_for_api_key)
 async def process_cluster_api_key(message: Message, state: FSMContext, bot: Bot):
-    await state.update_data(api_key=message.text)
+    api_key = message.text
+    await message.delete()
+    await state.update_data(api_key=api_key)
     data = await state.get_data()
 
     try:
@@ -144,12 +153,14 @@ async def process_cluster_api_key(message: Message, state: FSMContext, bot: Bot)
 
     except Exception as e:
         logger.error(f"Error creating cluster: {e}")
-        await _delete_prompt(bot, data)
-        await message.answer(
-            f"❌ Ошибка при создании кластера:\n\n"
+        await _edit_prompt(
+            bot, data,
+            f"❌ <b>Ошибка при создании кластера</b>\n\n"
             f"<code>{str(e)}</code>\n\n"
-            f"Проверьте введённые данные и попробуйте снова через /admin → 🌐 Кластеры",
-            reply_markup=get_admin_menu_keyboard()
+            f"Проверьте введённые данные и попробуйте снова:",
+            get_fsm_keyboard(PREFIX, back=True)
         )
+        await state.set_state(ClusterCreateForm.waiting_for_api_key)
+        return
 
     await state.clear()
