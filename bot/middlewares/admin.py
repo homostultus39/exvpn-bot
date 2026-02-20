@@ -1,14 +1,11 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
-from bot.management.settings import get_settings
+from bot.database.connection import sessionmaker
+from bot.database.management.operations.telegram_admin import get_admin_by_user_id
 
 
 class AdminMiddleware(BaseMiddleware):
-    def __init__(self):
-        super().__init__()
-        self.settings = get_settings()
-
     async def __call__(
         self,
         handler: Callable[[Message | CallbackQuery, Dict[str, Any]], Awaitable[Any]],
@@ -17,7 +14,10 @@ class AdminMiddleware(BaseMiddleware):
     ) -> Any:
         user_id = event.from_user.id
 
-        if user_id not in self.settings.admin_ids:
+        async with sessionmaker() as session:
+            admin = await get_admin_by_user_id(session, user_id)
+
+        if not admin:
             if isinstance(event, Message):
                 await event.answer("❌ У вас нет прав администратора")
             else:

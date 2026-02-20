@@ -5,7 +5,7 @@ def get_admin_menu_keyboard() -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text="🌐 Кластеры"), KeyboardButton(text="👥 Клиенты")],
         [KeyboardButton(text="💳 Тарифы"), KeyboardButton(text="📊 Статистика")],
-        [KeyboardButton(text="📢 Рассылка")],
+        [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="📋 Обращения")],
         [KeyboardButton(text="◀️ Выход из админ-панели")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -119,6 +119,22 @@ def get_fsm_keyboard(prefix: str, back: bool = False) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_support_ticket_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✍️ Ответить", callback_data="support_reply"),
+            InlineKeyboardButton(text="⏭ Пропустить", callback_data="support_skip"),
+        ],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="support_cancel")],
+    ])
+
+
+def get_support_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data="support_cancel")
+    ]])
 
 
 def get_stats_keyboard() -> InlineKeyboardMarkup:

@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pydantic import field_validator
+from pydantic import field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     privacy_policy_url: str
     user_agreement_url: str
 
+    db_host: str
+    db_port: int = 5432
+    db_name: str
+    db_user: str
+    db_password: str
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"
@@ -23,6 +29,16 @@ class Settings(BaseSettings):
     @field_validator("admin_ids")
     def parse_admin_ids(cls, v: str) -> list[int]:
         return [int(x.strip()) for x in v.split(",") if x.strip()]
+
+    @computed_field
+    @property
+    def async_postgres_url(self) -> str:
+        return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
+    @computed_field
+    @property
+    def sync_postgres_url(self) -> str:
+        return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
 
 @lru_cache()

@@ -26,7 +26,7 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text="🔑 Получить ключ")],
         [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💎 Подписка")],
-        [KeyboardButton(text="ℹ️ Помощь")]
+        [KeyboardButton(text="🚨 Сообщение об ошибке")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 

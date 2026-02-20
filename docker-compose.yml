@@ -9,10 +9,30 @@ services:
       - .env
     volumes:
       - ./bot/data:/app/bot/data
-    networks:
-      - exvpn-network
+    depends_on:
+      - postgres
+    # networks:
+    #   - exvpn-network
 
-networks:
-  exvpn-network:
-    name: ${CENTRAL_API_NETWORK_NAME}
-    external: true
+  postgres:
+    image: postgres:16-alpine
+    container_name: exvpn-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # networks:
+    #   - exvpn-network
+
+volumes:
+  postgres_data:
+
+# networks:
+#   exvpn-network:
+#     name: ${CENTRAL_API_NETWORK_NAME}
+#     external: true
