@@ -112,12 +112,12 @@ def get_tariff_edit_keyboard(tariff_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_fsm_keyboard(back: bool = False) -> ReplyKeyboardMarkup:
-    rows = []
+def get_fsm_keyboard(prefix: str, back: bool = False) -> InlineKeyboardMarkup:
+    buttons = []
     if back:
-        rows.append([KeyboardButton(text="◀️ Назад")])
-    rows.append([KeyboardButton(text="❌ Отмена")])
-    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, one_time_keyboard=True)
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")])
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_stats_keyboard() -> InlineKeyboardMarkup:
@@ -142,4 +142,10 @@ def get_stats_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
 def get_stats_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="◀️ Назад", callback_data="admin_stats_back")
+    ]])
+
+
+def get_stats_cluster_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="◀️ Назад", callback_data="admin_stats_cluster_list")
     ]])

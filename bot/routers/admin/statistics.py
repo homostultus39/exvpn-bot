@@ -8,7 +8,8 @@ from bot.entities.cluster.repository import ClusterRepository
 from bot.entities.statistics.repository import StatisticsRepository
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import (
-    get_stats_keyboard, get_stats_clusters_keyboard, get_stats_back_keyboard
+    get_stats_keyboard, get_stats_clusters_keyboard,
+    get_stats_back_keyboard, get_stats_cluster_back_keyboard
 )
 from bot.messages.admin import (
     CLIENTS_STATS_TEMPLATE, GLOBAL_STATS_TEMPLATE, CLUSTER_STATS_TEMPLATE
@@ -115,7 +116,7 @@ async def stats_cluster_handler(callback: CallbackQuery):
             rx=_fmt_bytes(stats.traffic.total_rx_bytes),
             tx=_fmt_bytes(stats.traffic.total_tx_bytes),
         )
-        await callback.message.edit_text(text, reply_markup=get_stats_back_keyboard())
+        await callback.message.edit_text(text, reply_markup=get_stats_cluster_back_keyboard())
         await callback.answer()
 
     except Exception as e:

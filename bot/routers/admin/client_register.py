@@ -1,6 +1,6 @@
 from datetime import datetime
 from bot.management.timezone import get_timezone, now as get_now
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -17,44 +17,70 @@ router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
 logger = configure_logger("ADMIN_CLIENT_REGISTER", "red")
 
+PREFIX = "cr"
+
 
 class ClientRegisterForm(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_expiration_date = State()
 
 
-@router.message(StateFilter(ClientRegisterForm), F.text == "❌ Отмена")
-async def cancel_client_register(message: Message, state: FSMContext):
+async def _edit_prompt(bot: Bot, data: dict, text: str, keyboard) -> None:
+    try:
+        await bot.edit_message_text(
+            chat_id=data["prompt_chat_id"],
+            message_id=data["prompt_msg_id"],
+            text=text,
+            reply_markup=keyboard
+        )
+    except Exception:
+        pass
+
+
+async def _delete_prompt(bot: Bot, data: dict) -> None:
+    try:
+        await bot.delete_message(data["prompt_chat_id"], data["prompt_msg_id"])
+    except Exception:
+        pass
+
+
+@router.callback_query(StateFilter(ClientRegisterForm), F.data == f"{PREFIX}_cancel")
+async def cancel_client_register(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Регистрация клиента отменена.", reply_markup=get_admin_menu_keyboard())
+    await callback.message.delete()
+    await callback.message.answer("❌ Регистрация клиента отменена.", reply_markup=get_admin_menu_keyboard())
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_register_client")
 async def start_client_register(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer(
+    msg = await callback.message.answer(
         "👤 <b>Регистрация клиента</b>\n\n"
         "Шаг 1/2: Введите Telegram ID пользователя\n"
         "(Например: 123456789)",
-        reply_markup=get_fsm_keyboard(back=False)
+        reply_markup=get_fsm_keyboard(PREFIX, back=False)
     )
+    await state.update_data(prompt_msg_id=msg.message_id, prompt_chat_id=msg.chat.id)
     await state.set_state(ClientRegisterForm.waiting_for_user_id)
     await callback.answer()
 
 
 @router.message(ClientRegisterForm.waiting_for_user_id)
-async def process_user_id(message: Message, state: FSMContext):
+async def process_user_id(message: Message, state: FSMContext, bot: Bot):
     try:
         user_id = int(message.text.strip())
         if user_id <= 0:
             raise ValueError("User ID must be positive")
 
         await state.update_data(user_id=user_id)
-        await message.answer(
+        data = await state.get_data()
+        await _edit_prompt(
+            bot, data,
             "👤 <b>Регистрация клиента</b>\n\n"
             "Шаг 2/2: Введите дату истечения подписки\n"
             "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n"
             "(Например: 31.12.2026 или 31.12.2026 23:59)",
-            reply_markup=get_fsm_keyboard(back=True)
+            get_fsm_keyboard(PREFIX, back=True)
         )
         await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
     except ValueError:
@@ -64,18 +90,19 @@ async def process_user_id(message: Message, state: FSMContext):
         )
 
 
-@router.message(ClientRegisterForm.waiting_for_expiration_date, F.text == "◀️ Назад")
-async def process_expiration_date_back(message: Message, state: FSMContext):
-    await message.answer(
+@router.callback_query(ClientRegisterForm.waiting_for_expiration_date, F.data == f"{PREFIX}_back")
+async def cr_back_to_user_id(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
         "👤 <b>Регистрация клиента</b>\n\n"
         "Шаг 1/2: Введите Telegram ID пользователя:",
-        reply_markup=get_fsm_keyboard(back=False)
+        reply_markup=get_fsm_keyboard(PREFIX, back=False)
     )
     await state.set_state(ClientRegisterForm.waiting_for_user_id)
+    await callback.answer()
 
 
 @router.message(ClientRegisterForm.waiting_for_expiration_date)
-async def process_expiration_date(message: Message, state: FSMContext):
+async def process_expiration_date(message: Message, state: FSMContext, bot: Bot):
     date_str = message.text.strip()
 
     try:
@@ -103,6 +130,7 @@ async def process_expiration_date(message: Message, state: FSMContext):
             existing_client = await client_service.find_by_username(username)
             if existing_client:
                 local_expires = existing_client.expires_at.astimezone(get_timezone())
+                await _delete_prompt(bot, data)
                 await message.answer(
                     f"⚠️ <b>Клиент уже существует</b>\n\n"
                     f"🆔 ID: <code>{existing_client.id}</code>\n"
@@ -117,15 +145,16 @@ async def process_expiration_date(message: Message, state: FSMContext):
             client = await client_service.create_client(username, expires_at)
             local_expires = client.expires_at.astimezone(get_timezone())
 
-            await message.answer(
-                f"✅ <b>Клиент зарегистрирован!</b>\n\n"
-                f"👤 Telegram ID: <code>{user_id}</code>\n"
-                f"🆔 Client ID: <code>{client.id}</code>\n"
-                f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
-                f"Пользователь может начать использовать бота!",
-                reply_markup=get_admin_menu_keyboard()
-            )
-            logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
+        await _delete_prompt(bot, data)
+        await message.answer(
+            f"✅ <b>Клиент зарегистрирован!</b>\n\n"
+            f"👤 Telegram ID: <code>{user_id}</code>\n"
+            f"🆔 Client ID: <code>{client.id}</code>\n"
+            f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"Пользователь может начать использовать бота!",
+            reply_markup=get_admin_menu_keyboard()
+        )
+        logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
 
     except ValueError:
         await message.answer(
@@ -139,6 +168,8 @@ async def process_expiration_date(message: Message, state: FSMContext):
         return
     except Exception as e:
         logger.error(f"Error registering client: {e}")
+        data = await state.get_data()
+        await _delete_prompt(bot, data)
         await message.answer(
             f"❌ Ошибка при регистрации клиента:\n\n"
             f"<code>{str(e)}</code>\n\n"

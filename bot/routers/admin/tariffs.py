@@ -1,5 +1,5 @@
 from uuid import UUID
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -20,6 +20,8 @@ router = Router()
 logger = configure_logger("ADMIN_TARIFFS", "red")
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
+
+PREFIX = "tc"
 
 _FIELD_LABELS = {
     "name": "Название",
@@ -43,15 +45,25 @@ class TariffStates(StatesGroup):
     edit_value = State()
 
 
-# ─── Cancel for create FSM ────────────────────────────────────────────────────
+async def _edit_prompt(bot: Bot, data: dict, text: str, keyboard) -> None:
+    try:
+        await bot.edit_message_text(
+            chat_id=data["prompt_chat_id"],
+            message_id=data["prompt_msg_id"],
+            text=text,
+            reply_markup=keyboard
+        )
+    except Exception:
+        pass
 
-@router.message(StateFilter(TariffStates), F.text == "❌ Отмена")
-async def cancel_tariff_create(message: Message, state: FSMContext):
+
+@router.callback_query(StateFilter(TariffStates), F.data == f"{PREFIX}_cancel")
+async def cancel_tariff_create(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Операция отменена.", reply_markup=get_admin_menu_keyboard())
+    await callback.message.delete()
+    await callback.message.answer("❌ Операция отменена.", reply_markup=get_admin_menu_keyboard())
+    await callback.answer()
 
-
-# ─── Tariff list ─────────────────────────────────────────────────────────────
 
 @router.message(F.text == "💳 Тарифы")
 async def tariffs_list_handler(message: Message):
@@ -82,8 +94,6 @@ async def tariffs_list_handler(message: Message):
         logger.error(f"Error in tariffs_list_handler: {e}")
         await message.answer("❌ Произошла ошибка при загрузке тарифов")
 
-
-# ─── Tariff card ─────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("admin_tariff_view_"))
 async def tariff_info_handler(callback: CallbackQuery):
@@ -117,8 +127,6 @@ async def tariff_info_handler(callback: CallbackQuery):
         await callback.answer("❌ Ошибка при загрузке информации", show_alert=True)
 
 
-# ─── Tariff delete ────────────────────────────────────────────────────────────
-
 @router.callback_query(F.data.startswith("admin_tariff_delete_"))
 async def tariff_delete_handler(callback: CallbackQuery):
     tariff_id = callback.data.removeprefix("admin_tariff_delete_")
@@ -138,8 +146,6 @@ async def tariff_delete_handler(callback: CallbackQuery):
         logger.error(f"Error in tariff_delete_handler: {e}")
         await callback.answer("❌ Ошибка при удалении тарифа", show_alert=True)
 
-
-# ─── Tariff edit ─────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("admin_tariff_edit_"))
 async def tariff_edit_start(callback: CallbackQuery, state: FSMContext):
@@ -220,8 +226,6 @@ async def tariff_edit_value(message: Message, state: FSMContext):
         await state.clear()
 
 
-# ─── Navigation ───────────────────────────────────────────────────────────────
-
 @router.callback_query(F.data == "admin_tariffs_back")
 async def tariffs_back_handler(callback: CallbackQuery):
     await callback.message.delete()
@@ -259,94 +263,135 @@ async def tariffs_refresh_handler(callback: CallbackQuery):
         await callback.answer("❌ Ошибка при обновлении", show_alert=True)
 
 
-# ─── Create tariff FSM ────────────────────────────────────────────────────────
-
 @router.callback_query(F.data == "admin_create_tariff")
 async def create_tariff_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "💳 <b>Создание нового тарифа</b>\n\n"
-        "Введите код тарифа (например: 30, 90, 180):"
+        "Шаг 1/6: Введите код тарифа (например: 30, 90, 180):",
+        reply_markup=get_fsm_keyboard(PREFIX, back=False)
+    )
+    await state.update_data(
+        prompt_msg_id=callback.message.message_id,
+        prompt_chat_id=callback.message.chat.id
     )
     await state.set_state(TariffStates.create_code)
     await callback.answer()
 
 
 @router.message(TariffStates.create_code)
-async def create_tariff_code(message: Message, state: FSMContext):
+async def create_tariff_code(message: Message, state: FSMContext, bot: Bot):
     await state.update_data(code=message.text.strip())
-    await message.answer("Введите название тарифа:", reply_markup=get_fsm_keyboard(back=False))
+    data = await state.get_data()
+    await _edit_prompt(
+        bot, data,
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 2/6: Введите название тарифа:",
+        get_fsm_keyboard(PREFIX, back=False)
+    )
     await state.set_state(TariffStates.create_name)
 
 
 @router.message(TariffStates.create_name)
-async def create_tariff_name(message: Message, state: FSMContext):
+async def create_tariff_name(message: Message, state: FSMContext, bot: Bot):
     await state.update_data(name=message.text.strip())
-    await message.answer("Введите количество дней:", reply_markup=get_fsm_keyboard(back=True))
+    data = await state.get_data()
+    await _edit_prompt(
+        bot, data,
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 3/6: Введите количество дней:",
+        get_fsm_keyboard(PREFIX, back=True)
+    )
     await state.set_state(TariffStates.create_days)
 
 
-@router.message(TariffStates.create_days, F.text == "◀️ Назад")
-async def create_tariff_days_back(message: Message, state: FSMContext):
-    await message.answer("Введите название тарифа:", reply_markup=get_fsm_keyboard(back=False))
+@router.callback_query(TariffStates.create_days, F.data == f"{PREFIX}_back")
+async def tc_back_to_name(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 2/6: Введите название тарифа:",
+        reply_markup=get_fsm_keyboard(PREFIX, back=False)
+    )
     await state.set_state(TariffStates.create_name)
+    await callback.answer()
 
 
 @router.message(TariffStates.create_days)
-async def create_tariff_days(message: Message, state: FSMContext):
+async def create_tariff_days(message: Message, state: FSMContext, bot: Bot):
     try:
         days = int(message.text.strip())
         await state.update_data(days=days)
-        await message.answer("Введите цену в рублях:", reply_markup=get_fsm_keyboard(back=True))
+        data = await state.get_data()
+        await _edit_prompt(
+            bot, data,
+            "💳 <b>Создание нового тарифа</b>\n\nШаг 4/6: Введите цену в рублях:",
+            get_fsm_keyboard(PREFIX, back=True)
+        )
         await state.set_state(TariffStates.create_price_rub)
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число:")
 
 
-@router.message(TariffStates.create_price_rub, F.text == "◀️ Назад")
-async def create_tariff_price_rub_back(message: Message, state: FSMContext):
-    await message.answer("Введите количество дней:", reply_markup=get_fsm_keyboard(back=True))
+@router.callback_query(TariffStates.create_price_rub, F.data == f"{PREFIX}_back")
+async def tc_back_to_days(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 3/6: Введите количество дней:",
+        reply_markup=get_fsm_keyboard(PREFIX, back=True)
+    )
     await state.set_state(TariffStates.create_days)
+    await callback.answer()
 
 
 @router.message(TariffStates.create_price_rub)
-async def create_tariff_price_rub(message: Message, state: FSMContext):
+async def create_tariff_price_rub(message: Message, state: FSMContext, bot: Bot):
     try:
         price_rub = int(message.text.strip())
         await state.update_data(price_rub=price_rub)
-        await message.answer("Введите цену в звёздах Telegram:", reply_markup=get_fsm_keyboard(back=True))
+        data = await state.get_data()
+        await _edit_prompt(
+            bot, data,
+            "💳 <b>Создание нового тарифа</b>\n\nШаг 5/6: Введите цену в звёздах Telegram:",
+            get_fsm_keyboard(PREFIX, back=True)
+        )
         await state.set_state(TariffStates.create_price_stars)
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число:")
 
 
-@router.message(TariffStates.create_price_stars, F.text == "◀️ Назад")
-async def create_tariff_price_stars_back(message: Message, state: FSMContext):
-    await message.answer("Введите цену в рублях:", reply_markup=get_fsm_keyboard(back=True))
+@router.callback_query(TariffStates.create_price_stars, F.data == f"{PREFIX}_back")
+async def tc_back_to_price_rub(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 4/6: Введите цену в рублях:",
+        reply_markup=get_fsm_keyboard(PREFIX, back=True)
+    )
     await state.set_state(TariffStates.create_price_rub)
+    await callback.answer()
 
 
 @router.message(TariffStates.create_price_stars)
-async def create_tariff_price_stars(message: Message, state: FSMContext):
+async def create_tariff_price_stars(message: Message, state: FSMContext, bot: Bot):
     try:
         price_stars = int(message.text.strip())
         await state.update_data(price_stars=price_stars)
-        await message.answer(
-            "Введите порядковый номер для сортировки (0 = первый):",
-            reply_markup=get_fsm_keyboard(back=True)
+        data = await state.get_data()
+        await _edit_prompt(
+            bot, data,
+            "💳 <b>Создание нового тарифа</b>\n\nШаг 6/6: Введите порядковый номер сортировки (0 = первый):",
+            get_fsm_keyboard(PREFIX, back=True)
         )
         await state.set_state(TariffStates.create_sort_order)
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число:")
 
 
-@router.message(TariffStates.create_sort_order, F.text == "◀️ Назад")
-async def create_tariff_sort_order_back(message: Message, state: FSMContext):
-    await message.answer("Введите цену в звёздах Telegram:", reply_markup=get_fsm_keyboard(back=True))
+@router.callback_query(TariffStates.create_sort_order, F.data == f"{PREFIX}_back")
+async def tc_back_to_price_stars(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "💳 <b>Создание нового тарифа</b>\n\nШаг 5/6: Введите цену в звёздах Telegram:",
+        reply_markup=get_fsm_keyboard(PREFIX, back=True)
+    )
     await state.set_state(TariffStates.create_price_stars)
+    await callback.answer()
 
 
 @router.message(TariffStates.create_sort_order)
-async def create_tariff_finish(message: Message, state: FSMContext):
+async def create_tariff_finish(message: Message, state: FSMContext, bot: Bot):
     try:
         sort_order = int(message.text.strip())
         data = await state.get_data()
@@ -368,20 +413,23 @@ async def create_tariff_finish(message: Message, state: FSMContext):
 
             tariff = await tariff_service.create_tariff(request)
 
-            await message.answer(
-                f"✅ Тариф <b>{tariff.name}</b> успешно создан!\n\n"
-                f"Код: {tariff.code}\n"
-                f"Дней: {tariff.days}\n"
-                f"Цена: {tariff.price_rub}₽ / {tariff.price_stars}⭐",
-                reply_markup=get_admin_menu_keyboard()
-            )
-            logger.info(f"Tariff {tariff.code} created by admin {message.from_user.id}")
-
+        await _edit_prompt(
+            bot, data,
+            f"✅ Тариф <b>{tariff.name}</b> успешно создан!\n\n"
+            f"Код: {tariff.code}\n"
+            f"Дней: {tariff.days}\n"
+            f"Цена: {tariff.price_rub}₽ / {tariff.price_stars}⭐",
+            None
+        )
+        await message.answer("🔐 Вы в главном меню.", reply_markup=get_admin_menu_keyboard())
+        logger.info(f"Tariff {tariff.code} created by admin {message.from_user.id}")
         await state.clear()
 
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число:")
     except Exception as e:
         logger.error(f"Error creating tariff: {e}")
-        await message.answer("❌ Ошибка при создании тарифа", reply_markup=get_admin_menu_keyboard())
+        data = await state.get_data()
+        await _edit_prompt(bot, data, f"❌ Ошибка при создании тарифа:\n\n<code>{str(e)}</code>", None)
+        await message.answer("Попробуйте снова через /admin → 💳 Тарифы", reply_markup=get_admin_menu_keyboard())
         await state.clear()
