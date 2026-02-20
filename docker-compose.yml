@@ -10,9 +10,10 @@ services:
     volumes:
       - ./bot/data:/app/bot/data
     depends_on:
-      - postgres
-    # networks:
-    #   - exvpn-network
+      postgres:
+        condition: service_healthy
+    networks:
+      - exvpn-network
 
   postgres:
     image: postgres:16-alpine
@@ -26,13 +27,18 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # networks:
-    #   - exvpn-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$DB_USER -d $$DB_NAME"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exvpn-network
 
 volumes:
   postgres_data:
 
-# networks:
-#   exvpn-network:
-#     name: ${CENTRAL_API_NETWORK_NAME}
-#     external: true
+networks:
+  exvpn-network:
+    name: ${CENTRAL_API_NETWORK_NAME}
+    external: true
