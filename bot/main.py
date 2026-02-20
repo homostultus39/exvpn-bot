@@ -65,7 +65,7 @@ async def start_polling():
     await seed_admins()
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.message.middleware(FsmCancelOnMenuMiddleware())
+    dp.message.outer_middleware(FsmCancelOnMenuMiddleware())
 
     dp.include_router(start_router)
     dp.include_router(locations_router)

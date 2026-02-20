@@ -131,8 +131,33 @@ async def cluster_delete_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_clusters_back")
 async def clusters_back_handler(callback: CallbackQuery):
-    await callback.message.delete()
-    await callback.answer()
+    try:
+        api_client = get_api_client()
+        async with api_client:
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
+            clusters = await cluster_service.list_clusters()
+
+            active_count = sum(1 for c in clusters if c.is_active)
+
+            clusters_list = ""
+            for cluster in clusters:
+                status_emoji = "✅" if cluster.is_active else "❌"
+                clusters_list += f"{status_emoji} <b>{cluster.name}</b>\n"
+                clusters_list += f"   Пиров: {cluster.online_peers_count}/{cluster.peers_count}\n\n"
+
+            text = CLUSTERS_LIST_TEMPLATE.format(
+                total=len(clusters),
+                active=active_count,
+                clusters_list=clusters_list
+            )
+
+            await callback.message.edit_text(text, reply_markup=get_clusters_keyboard(clusters))
+            await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in clusters_back_handler: {e}")
+        await callback.answer("❌ Ошибка при загрузке кластеров", show_alert=True)
 
 
 @router.callback_query(F.data == "admin_clusters_refresh")
