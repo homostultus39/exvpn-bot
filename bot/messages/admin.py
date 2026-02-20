@@ -36,6 +36,41 @@ GENERAL_STATS_TEMPLATE = """📊 <b>Общая статистика</b>
 📡 Онлайн: {peers_online}"""
 
 
+GLOBAL_STATS_TEMPLATE = """📊 <b>Общая статистика</b>
+
+🌐 Кластеры: {clusters_total} (активных: {clusters_active}, неактивных: {clusters_inactive})
+
+👥 Клиенты: {clients_total}
+   ✅ Активных: {clients_active}
+   🔰 Пробных: {clients_trial}
+   ❌ Истёкших: {clients_expired}
+
+🔑 Пиры: {peers_total} (онлайн: {peers_online})
+   📱 AmneziaVPN: {peers_amnezia_vpn}
+   🔒 AmneziaWG: {peers_amnezia_wg}
+
+📶 Трафик:
+   ⬇️ Получено: {rx}
+   ⬆️ Отправлено: {tx}"""
+
+
+CLUSTER_STATS_TEMPLATE = """🌐 <b>Статистика кластера: {cluster_name}</b>
+
+📊 Статус: {status}
+🐳 Контейнер: {container_status}
+🔗 Протокол: {protocol}
+
+👥 Клиентов: {clients_total}
+
+🔑 Пиров: {peers_total} (онлайн: {peers_online})
+   📱 AmneziaVPN: {peers_amnezia_vpn}
+   🔒 AmneziaWG: {peers_amnezia_wg}
+
+📶 Трафик:
+   ⬇️ Получено: {rx}
+   ⬆️ Отправлено: {tx}"""
+
+
 TARIFFS_LIST_TEMPLATE = """💳 <b>Тарифы</b>
 
 Всего: {total}

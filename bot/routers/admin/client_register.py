@@ -4,10 +4,12 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 from bot.management.dependencies import get_api_client
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.middlewares.admin import AdminMiddleware
+from bot.keyboards.admin import get_admin_menu_keyboard, get_fsm_keyboard
 from bot.management.logger import configure_logger
 
 router = Router()
@@ -21,6 +23,10 @@ class ClientRegisterForm(StatesGroup):
     waiting_for_expiration_date = State()
 
 
+@router.message(StateFilter(ClientRegisterForm), F.text == "❌ Отмена")
+async def cancel_client_register(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Регистрация клиента отменена.", reply_markup=get_admin_menu_keyboard())
 
 
 @router.callback_query(F.data == "admin_register_client")
@@ -28,7 +34,8 @@ async def start_client_register(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "👤 <b>Регистрация клиента</b>\n\n"
         "Шаг 1/2: Введите Telegram ID пользователя\n"
-        "(Например: 123456789)"
+        "(Например: 123456789)",
+        reply_markup=get_fsm_keyboard(back=False)
     )
     await state.set_state(ClientRegisterForm.waiting_for_user_id)
     await callback.answer()
@@ -46,14 +53,25 @@ async def process_user_id(message: Message, state: FSMContext):
             "👤 <b>Регистрация клиента</b>\n\n"
             "Шаг 2/2: Введите дату истечения подписки\n"
             "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n"
-            "(Например: 31.12.2026 или 31.12.2026 23:59)"
+            "(Например: 31.12.2026 или 31.12.2026 23:59)",
+            reply_markup=get_fsm_keyboard(back=True)
         )
         await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
     except ValueError:
         await message.answer(
             "❌ Некорректный Telegram ID. Введите положительное число.\n"
-            "Попробуйте еще раз:"
+            "Попробуйте ещё раз:"
         )
+
+
+@router.message(ClientRegisterForm.waiting_for_expiration_date, F.text == "◀️ Назад")
+async def process_expiration_date_back(message: Message, state: FSMContext):
+    await message.answer(
+        "👤 <b>Регистрация клиента</b>\n\n"
+        "Шаг 1/2: Введите Telegram ID пользователя:",
+        reply_markup=get_fsm_keyboard(back=False)
+    )
+    await state.set_state(ClientRegisterForm.waiting_for_user_id)
 
 
 @router.message(ClientRegisterForm.waiting_for_expiration_date)
@@ -90,7 +108,8 @@ async def process_expiration_date(message: Message, state: FSMContext):
                     f"🆔 ID: <code>{existing_client.id}</code>\n"
                     f"👤 Username: {existing_client.username}\n"
                     f"📅 Текущая дата истечения: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
-                    f"Регистрация отменена."
+                    f"Регистрация отменена.",
+                    reply_markup=get_admin_menu_keyboard()
                 )
                 await state.clear()
                 return
@@ -103,9 +122,9 @@ async def process_expiration_date(message: Message, state: FSMContext):
                 f"👤 Telegram ID: <code>{user_id}</code>\n"
                 f"🆔 Client ID: <code>{client.id}</code>\n"
                 f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
-                f"Пользователь может начать использовать бота!"
+                f"Пользователь может начать использовать бота!",
+                reply_markup=get_admin_menu_keyboard()
             )
-
             logger.info(f"Admin {message.from_user.id} registered client {client.id} for user {user_id} until {expires_at}")
 
     except ValueError:
@@ -115,7 +134,7 @@ async def process_expiration_date(message: Message, state: FSMContext):
             "Примеры:\n"
             "• 31.12.2026\n"
             "• 31.12.2026 23:59\n\n"
-            "Попробуйте еще раз:"
+            "Попробуйте ещё раз:"
         )
         return
     except Exception as e:
@@ -123,7 +142,8 @@ async def process_expiration_date(message: Message, state: FSMContext):
         await message.answer(
             f"❌ Ошибка при регистрации клиента:\n\n"
             f"<code>{str(e)}</code>\n\n"
-            f"Проверьте данные и попробуйте снова через /admin"
+            f"Проверьте данные и попробуйте снова через /admin",
+            reply_markup=get_admin_menu_keyboard()
         )
 
     await state.clear()

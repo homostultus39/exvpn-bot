@@ -106,6 +106,26 @@ async def cluster_restart_handler(callback: CallbackQuery):
         await callback.answer("❌ Ошибка при перезапуске кластера", show_alert=True)
 
 
+@router.callback_query(F.data.startswith("admin_cluster_delete_"))
+async def cluster_delete_handler(callback: CallbackQuery):
+    cluster_id = callback.data.removeprefix("admin_cluster_delete_")
+
+    try:
+        api_client = get_api_client()
+        async with api_client:
+            cluster_repo = ClusterRepository(api_client)
+            cluster_service = ClusterService(cluster_repo)
+            await cluster_service.delete_cluster(UUID(cluster_id))
+
+            await callback.answer("✅ Кластер удалён", show_alert=True)
+            await callback.message.delete()
+            logger.info(f"Cluster {cluster_id} deleted by admin {callback.from_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error in cluster_delete_handler: {e}")
+        await callback.answer("❌ Ошибка при удалении кластера", show_alert=True)
+
+
 @router.callback_query(F.data == "admin_clusters_back")
 async def clusters_back_handler(callback: CallbackQuery):
     await callback.message.delete()

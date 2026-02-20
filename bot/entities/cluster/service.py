@@ -34,5 +34,8 @@ class ClusterService:
         )
         return await self.repository.create(request)
 
+    async def delete_cluster(self, cluster_id: UUID) -> None:
+        await self.repository.delete(cluster_id)
+
     async def restart_cluster(self, cluster_id: UUID):
         return await self.repository.restart(cluster_id)
