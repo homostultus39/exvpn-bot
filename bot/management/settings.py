@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     privacy_policy_url: str
     user_agreement_url: str
 
-    db_host: str
-    db_port: int = 5432
-    db_name: str
-    db_user: str
-    db_password: str
+    postgres_host: str
+    postgres_port: int = 5432
+    postgres_db: str
+    postgres_user: str
+    postgres_password: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -33,12 +33,12 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def async_postgres_url(self) -> str:
-        return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
     @computed_field
     @property
     def sync_postgres_url(self) -> str:
-        return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
 
 @lru_cache()
