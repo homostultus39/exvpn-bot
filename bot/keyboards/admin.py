@@ -23,10 +23,6 @@ def get_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
         text="➕ Создать кластер",
         callback_data="admin_create_cluster"
     )])
-    buttons.append([InlineKeyboardButton(
-        text="🔄 Обновить",
-        callback_data="admin_clusters_refresh"
-    )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -53,10 +49,6 @@ def get_clients_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="👤 Регистрация клиента",
             callback_data="admin_register_client"
-        )],
-        [InlineKeyboardButton(
-            text="🔄 Обновить",
-            callback_data="admin_clients_refresh"
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -73,10 +65,6 @@ def get_tariffs_keyboard(tariffs: list) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(
         text="➕ Создать тариф",
         callback_data="admin_create_tariff"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text="🔄 Обновить",
-        callback_data="admin_tariffs_refresh"
     )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
