@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import hmac
 from alembic import command
 from alembic.config import Config
 from aiogram import Bot, Dispatcher
@@ -6,6 +8,7 @@ from aiogram.enums.parse_mode import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+from aiohttp import web
 
 from bot.management.settings import get_settings
 from bot.routers.start import router as start_router
@@ -24,7 +27,18 @@ from bot.routers.admin.broadcast import router as admin_broadcast_router
 from bot.routers.admin.support import router as admin_support_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
 from bot.database.management.default.admins import seed_admins
+from bot.database.connection import sessionmaker
+from bot.database.management.operations.pending_payment import (
+    get_pending_by_order_id,
+    delete_pending_payment,
+)
 from bot.management.logger import configure_logger
+from bot.entities.client.repository import ClientRepository
+from bot.entities.client.service import ClientService
+from bot.entities.tariff.repository import TariffRepository
+from bot.entities.tariff.service import TariffService
+from bot.entities.subscription.service import SubscriptionService
+from bot.management.dependencies import get_api_client
 
 settings = get_settings()
 logger = configure_logger("EXVPN_BOT", "blue")
@@ -60,6 +74,83 @@ async def setup_commands() -> None:
             logger.warning(f"Could not set commands for admin {admin_id}: {e}")
 
 
+async def rukassa_webhook(request: web.Request) -> web.Response:
+    try:
+        data = await request.post()
+        payment_id = data.get("id", "")
+        order_id = data.get("order_id", "")
+        status = data.get("status", "")
+        amount = data.get("amount", "0")
+        in_amount = data.get("in_amount", "0")
+        created = data.get("createdDateTime", "")
+        signature = data.get("sign", "")
+
+        expected_sign = hmac.new(
+            settings.rukassa_api_key.encode(),
+            f"{payment_id}|{created}|{amount}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if signature != expected_sign:
+            logger.warning(f"Rukassa webhook: invalid signature for order {order_id}")
+            return web.Response(text="ERROR SIGN")
+
+        if float(in_amount) < float(amount):
+            logger.warning(f"Rukassa webhook: insufficient amount for order {order_id}")
+            return web.Response(text="ERROR AMOUNT")
+
+        if status == "PAID":
+            async with sessionmaker() as session:
+                pending = await get_pending_by_order_id(session, order_id)
+                if not pending:
+                    logger.warning(f"Rukassa webhook: pending not found for order {order_id}")
+                    return web.Response(text="OK")
+
+                telegram_id = pending.telegram_id
+                tariff_code = pending.tariff_code
+                is_extension = pending.is_extension
+                record_id = pending.id
+
+            api_client = get_api_client()
+            async with api_client:
+                client_repo = ClientRepository(api_client)
+                client_service = ClientService(client_repo)
+                tariff_repo = TariffRepository(api_client)
+                tariff_service = TariffService(tariff_repo)
+                subscription_service = SubscriptionService(client_service, tariff_service)
+                client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
+                if is_extension:
+                    await subscription_service.extend_subscription(client_id, tariff_code)
+                else:
+                    await subscription_service.buy_subscription(client_id, tariff_code)
+
+            async with sessionmaker() as session:
+                await delete_pending_payment(session, record_id)
+
+            await bot.send_message(
+                chat_id=telegram_id,
+                text="✅ <b>Оплата через Rukassa подтверждена!</b>\n\n"
+                     "Подписка активирована. Используйте кнопку <b>🔑 Получить ключ</b>.",
+            )
+            logger.info(f"Rukassa webhook: subscription activated for user {telegram_id}, order {order_id}")
+
+        return web.Response(text="OK")
+
+    except Exception as e:
+        logger.error(f"Rukassa webhook error: {e}")
+        return web.Response(text="ERROR")
+
+
+async def start_webhook_server() -> None:
+    app = web.Application()
+    app.router.add_post("/rukassa/webhook", rukassa_webhook)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
+    await site.start()
+    logger.info("Rukassa webhook server started on :8080")
+
+
 async def start_polling():
     run_migrations()
     await seed_admins()
@@ -85,6 +176,7 @@ async def start_polling():
 
     logger.info("Bot starting...")
     await setup_commands()
+    asyncio.create_task(start_webhook_server())
     await dp.start_polling(bot)
 
 

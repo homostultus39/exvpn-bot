@@ -78,6 +78,43 @@ def get_subscription_keyboard(tariffs: list[TariffResponse], is_extension: bool 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_payment_method_keyboard(
+    tariff_code: str,
+    price_rub: int,
+    price_stars: int,
+    is_extension: bool,
+) -> InlineKeyboardMarkup:
+    prefix = "extend" if is_extension else "buy"
+    back_cb = "extend_subscription" if is_extension else "back_to_tariffs"
+    buttons = [
+        [InlineKeyboardButton(
+            text=f"⭐ Telegram Stars ({price_stars} ⭐)",
+            callback_data=f"pay_stars_{tariff_code}_{prefix}"
+        )],
+        [InlineKeyboardButton(
+            text=f"🔵 Rukassa ({price_rub} ₽)",
+            callback_data=f"pay_rukassa_{tariff_code}_{prefix}"
+        )],
+        [InlineKeyboardButton(
+            text=f"💳 YooMoney ({price_rub} ₽)",
+            callback_data=f"pay_yookassa_{tariff_code}_{prefix}"
+        )],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=back_cb)],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_check_payment_keyboard(method: str, identifier: str) -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(
+            text="✅ Я оплатил",
+            callback_data=f"check_{method}_{identifier}"
+        )],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_payment")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="◀️ В главное меню", callback_data="back_to_menu")

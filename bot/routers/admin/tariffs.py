@@ -253,8 +253,33 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "admin_tariffs_back")
 async def tariffs_back_handler(callback: CallbackQuery):
-    await callback.message.delete()
-    await callback.answer()
+    try:
+        api_client = get_api_client()
+        async with api_client:
+            tariff_repo = TariffRepository(api_client)
+            tariff_service = TariffService(tariff_repo)
+            tariffs = await tariff_service.get_all_tariffs()
+
+            active_count = sum(1 for t in tariffs if t.is_active)
+
+            tariffs_list = ""
+            for tariff in sorted(tariffs, key=lambda t: t.sort_order):
+                status_emoji = "✅" if tariff.is_active else "❌"
+                tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
+                tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
+
+            text = TARIFFS_LIST_TEMPLATE.format(
+                total=len(tariffs),
+                active=active_count,
+                tariffs_list=tariffs_list
+            )
+
+            await callback.message.edit_text(text, reply_markup=get_tariffs_keyboard(tariffs))
+            await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in tariffs_back_handler: {e}")
+        await callback.answer("❌ Ошибка при загрузке тарифов", show_alert=True)
 
 
 @router.callback_query(F.data == "admin_tariffs_refresh")
