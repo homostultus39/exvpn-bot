@@ -27,7 +27,6 @@ from bot.routers.admin.broadcast import router as admin_broadcast_router
 from bot.routers.admin.support import router as admin_support_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
 from bot.database.management.default.admins import seed_admins
-from bot.database.connection import sessionmaker
 from bot.database.management.operations.pending_payment import (
     get_pending_by_order_id,
     delete_pending_payment,
@@ -75,6 +74,8 @@ async def setup_commands() -> None:
 
 
 async def rukassa_webhook(request: web.Request) -> web.Response:
+    from bot.database.connection import sessionmaker
+    
     try:
         data = await request.post()
         payment_id = data.get("id", "")
