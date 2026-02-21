@@ -9,6 +9,8 @@ from bot.keyboards.user import get_agreement_keyboard, get_main_menu_keyboard
 from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO, TRIAL_MESSAGE
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
+from bot.database.connection import sessionmaker
+from bot.database.management.operations.telegram_admin import get_admin_by_user_id
 
 router = Router()
 settings = get_settings()
@@ -39,12 +41,16 @@ async def agree_to_terms_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
 
     try:
+        async with sessionmaker() as db_session:
+            admin = await get_admin_by_user_id(db_session, telegram_id)
+            is_admin = admin is not None
+
         api_client = get_api_client()
         async with api_client:
             client_repo = ClientRepository(api_client)
             client_service = ClientService(client_repo)
 
-            _, is_new = await client_service.get_or_create_by_telegram_id(telegram_id)
+            _, is_new = await client_service.get_or_create_by_telegram_id(telegram_id, is_admin=is_admin)
             agreed_users.add(telegram_id)
 
             logger.info(f"User {telegram_id} accepted terms and registered (new={is_new})")

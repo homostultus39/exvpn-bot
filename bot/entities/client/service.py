@@ -12,8 +12,8 @@ class ClientService:
     def __init__(self, repository: ClientRepository):
         self.repository = repository
 
-    async def create_client(self, username: str) -> ClientResponse:
-        request = CreateClientRequest(username=username)
+    async def create_client(self, username: str, is_admin: bool = False) -> ClientResponse:
+        request = CreateClientRequest(username=username, is_admin=is_admin)
         return await self.repository.create(request)
 
     async def get_client(self, client_id: UUID) -> ClientWithPeersResponse:
@@ -33,12 +33,12 @@ class ClientService:
     async def find_by_username(self, username: str) -> ClientWithPeersResponse | None:
         return await self.repository.find_by_username(username)
 
-    async def get_or_create_by_telegram_id(self, telegram_id: int) -> tuple[ClientResponse, bool]:
+    async def get_or_create_by_telegram_id(self, telegram_id: int, is_admin: bool = False) -> tuple[ClientResponse, bool]:
         username = str(telegram_id)
         client = await self.repository.find_by_username(username)
         if client:
             return client, False
-        client = await self.create_client(username)
+        client = await self.create_client(username, is_admin=is_admin)
         return client, True
 
     async def get_client_id_by_telegram_id(self, telegram_id: int) -> UUID:
