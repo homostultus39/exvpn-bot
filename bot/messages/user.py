@@ -1,7 +1,18 @@
 CLIENT_INFO = """📱 <b>Клиенты для подключения:</b>
 
 🖥 Windows / Linux / Android → <b>AmneziaVPN</b>
-🍎 macOS / iOS → <b>AmneziaWG</b>"""
+🍎 macOS / iOS → <b>AmneziaWG</b>
+
+╔═══════════════════════════════════╗
+║  📌 <b>ВАЖНОЕ ПРИМЕЧАНИЕ</b>          ║
+╚═══════════════════════════════════╝
+
+⚠️ В Play Market приложение AmneziaVPN на момент написания этого текста <b>устарело</b>!
+
+📥 <b>Скачивайте актуальную версию:</b>
+🔗 <a href="https://github.com/amnezia-vpn/amnezia-client/releases">GitHub Releases</a>
+
+👉 В последнем релизе выберите вашу платформу и установите на устройство."""
 
 
 WELCOME_MESSAGE = """╔═══════════════════════╗
