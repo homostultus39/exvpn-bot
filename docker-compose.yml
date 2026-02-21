@@ -1,20 +1,4 @@
 services:
-  exvpn-bot:
-    build:
-      context: .
-      dockerfile: bot/Dockerfile
-    container_name: exvpn-bot
-    restart: unless-stopped
-    env_file:
-      - .env
-    volumes:
-      - ./bot/data:/app/bot/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - exvpn-network
-
   postgres:
     image: postgres:16-alpine
     container_name: exvpn-postgres
@@ -34,6 +18,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - exvpn-network
+
+  exvpn-bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: exvpn-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./bot/data:/app/bot/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - exvpn-network
 

@@ -31,6 +31,7 @@ from bot.database.management.operations.pending_payment import (
     get_pending_by_order_id,
     delete_pending_payment,
 )
+from bot.database.connection import sessionmaker
 from bot.management.logger import configure_logger
 from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
@@ -74,8 +75,6 @@ async def setup_commands() -> None:
 
 
 async def rukassa_webhook(request: web.Request) -> web.Response:
-    from bot.database.connection import sessionmaker
-    
     try:
         data = await request.post()
         payment_id = data.get("id", "")
