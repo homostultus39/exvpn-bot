@@ -9,7 +9,7 @@ class CreateClientRequest(BaseModel):
 
 
 class UpdateClientRequest(BaseModel):
-    expires_at: datetime
+    expires_at: datetime | None
 
 
 class SubscribeRequest(BaseModel):

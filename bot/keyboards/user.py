@@ -137,3 +137,9 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_error_report_cancel_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")
+    ]])

@@ -1,11 +1,12 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 
 from bot.database.connection import sessionmaker
 from bot.database.management.operations.report import create_ticket
+from bot.keyboards.user import get_error_report_cancel_keyboard
 from bot.management.logger import configure_logger
 
 router = Router()
@@ -16,12 +17,6 @@ PREFIX = "er"
 
 class ErrorReportForm(StatesGroup):
     waiting_for_message = State()
-
-
-def _cancel_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="❌ Отмена", callback_data=f"{PREFIX}_cancel")
-    ]])
 
 
 @router.message(F.text == "🚨 Сообщение об ошибке")
@@ -35,7 +30,7 @@ async def error_report_start(message: Message, state: FSMContext, bot: Bot):
         "🚨 <b>Сообщение об ошибке</b>\n\n"
         "Опишите вашу проблему или ошибку, и мы постараемся помочь вам как можно скорее.\n\n"
         "Введите текст сообщения:",
-        reply_markup=_cancel_keyboard()
+        reply_markup=get_error_report_cancel_keyboard(PREFIX)
     )
     await state.update_data(prompt_msg_id=msg.message_id, prompt_chat_id=msg.chat.id)
     await state.set_state(ErrorReportForm.waiting_for_message)

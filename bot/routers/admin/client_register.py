@@ -1,10 +1,7 @@
 from datetime import datetime
 from bot.management.timezone import get_timezone, now as get_now
 from aiogram import Router, F, Bot
-from aiogram.types import (
-    Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
-)
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
@@ -14,7 +11,12 @@ from bot.entities.client.repository import ClientRepository
 from bot.entities.client.service import ClientService
 from bot.entities.client.models import UpdateClientRequest
 from bot.middlewares.admin import AdminMiddleware
-from bot.keyboards.admin import get_admin_menu_keyboard, get_fsm_keyboard
+from bot.keyboards.admin import (
+    get_admin_menu_keyboard,
+    get_fsm_keyboard,
+    get_client_register_is_admin_keyboard,
+    get_client_register_expiration_date_keyboard,
+)
 from bot.management.logger import configure_logger
 
 router = Router()
@@ -29,17 +31,6 @@ class ClientRegisterForm(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_expiration_date = State()
     waiting_for_is_admin = State()
-
-
-def _get_is_admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Да", callback_data=f"{PREFIX}_is_admin_yes"),
-            InlineKeyboardButton(text="❌ Нет", callback_data=f"{PREFIX}_is_admin_no"),
-        ],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{PREFIX}_back")],
-        [InlineKeyboardButton(text="✖️ Отмена", callback_data=f"{PREFIX}_cancel")],
-    ])
 
 
 async def _edit_prompt(bot: Bot, data: dict, text: str, keyboard) -> None:
@@ -100,8 +91,9 @@ async def process_user_id(message: Message, state: FSMContext, bot: Bot):
             "👤 <b>Регистрация клиента</b>\n\n"
             "Шаг 2/3: Введите дату истечения подписки\n"
             "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n"
-            "(Например: 31.12.2026 или 31.12.2026 23:59)",
-            get_fsm_keyboard(PREFIX, back=True),
+            "(Например: 31.12.2026 или 31.12.2026 23:59)\n\n"
+            "💡 Для администраторов можно пропустить этот шаг",
+            get_client_register_expiration_date_keyboard(PREFIX),
         )
         await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
     except ValueError:
@@ -126,6 +118,20 @@ async def cr_back_to_user_id(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(ClientRegisterForm.waiting_for_expiration_date, F.data == f"{PREFIX}_skip_expiration")
+async def skip_expiration_date(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    await state.update_data(expires_at=None)
+    await _edit_prompt(
+        bot, data,
+        "👤 <b>Регистрация клиента</b>\n\n"
+        "Шаг 3/3: Является ли пользователь администратором?",
+        get_client_register_is_admin_keyboard(PREFIX),
+    )
+    await state.set_state(ClientRegisterForm.waiting_for_is_admin)
+    await callback.answer()
+
+
 @router.message(ClientRegisterForm.waiting_for_expiration_date)
 async def process_expiration_date(message: Message, state: FSMContext, bot: Bot):
     await message.delete()
@@ -144,7 +150,7 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
                 "Шаг 2/3: Введите дату истечения подписки\n"
                 "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
                 "⚠️ Указанная дата уже прошла. Введите будущую дату:",
-                get_fsm_keyboard(PREFIX, back=True),
+                get_client_register_expiration_date_keyboard(PREFIX),
             )
             return
 
@@ -153,7 +159,7 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             bot, data,
             "👤 <b>Регистрация клиента</b>\n\n"
             "Шаг 3/3: Является ли пользователь администратором?",
-            _get_is_admin_keyboard(),
+            get_client_register_is_admin_keyboard(PREFIX),
         )
         await state.set_state(ClientRegisterForm.waiting_for_is_admin)
 
@@ -165,17 +171,22 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
             "❌ Некорректный формат. Примеры: 31.12.2026 или 31.12.2026 23:59\n"
             "Попробуйте ещё раз:",
-            get_fsm_keyboard(PREFIX, back=True),
+            get_client_register_expiration_date_keyboard(PREFIX),
         )
 
 
 @router.callback_query(ClientRegisterForm.waiting_for_is_admin, F.data == f"{PREFIX}_back")
-async def cr_back_to_expiration(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(
-        "👤 <b>Регистрация клиента</b>\n\n"
-        "Шаг 2/3: Введите дату истечения подписки\n"
-        "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ:",
-        reply_markup=get_fsm_keyboard(PREFIX, back=True),
+async def cr_back_to_expiration(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    expires_at_text = ""
+    if data.get("expires_at"):
+        expires_at_text = "\n\n💡 Для администраторов можно пропустить этот шаг"
+    await _edit_prompt(
+        bot, data,
+        f"👤 <b>Регистрация клиента</b>\n\n"
+        f"Шаг 2/3: Введите дату истечения подписки\n"
+        f"Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ{expires_at_text}",
+        get_client_register_expiration_date_keyboard(PREFIX),
     )
     await state.set_state(ClientRegisterForm.waiting_for_expiration_date)
     await callback.answer()
@@ -189,7 +200,20 @@ async def process_is_admin(callback: CallbackQuery, state: FSMContext, bot: Bot)
     is_admin = callback.data == f"{PREFIX}_is_admin_yes"
     data = await state.get_data()
     user_id = data["user_id"]
-    expires_at = datetime.fromisoformat(data["expires_at"])
+    expires_at_str = data.get("expires_at")
+    expires_at = datetime.fromisoformat(expires_at_str) if expires_at_str else None
+
+    if not is_admin and expires_at is None:
+        await _delete_prompt(bot, data)
+        await callback.message.answer(
+            "❌ <b>Ошибка регистрации</b>\n\n"
+            "Для обычных пользователей необходимо указать дату истечения подписки.\n"
+            "Пожалуйста, начните регистрацию заново.",
+            reply_markup=get_admin_menu_keyboard(),
+        )
+        await state.clear()
+        await callback.answer()
+        return
 
     try:
         api_client = get_api_client()
@@ -200,13 +224,16 @@ async def process_is_admin(callback: CallbackQuery, state: FSMContext, bot: Bot)
 
             existing_client = await client_service.find_by_username(username)
             if existing_client:
-                local_expires = existing_client.expires_at.astimezone(get_timezone())
+                expires_info = ""
+                if existing_client.expires_at:
+                    local_expires = existing_client.expires_at.astimezone(get_timezone())
+                    expires_info = f"📅 Текущая дата истечения: {local_expires.strftime('%d.%m.%Y %H:%M')}\n"
                 await _delete_prompt(bot, data)
                 await callback.message.answer(
                     f"⚠️ <b>Клиент уже существует</b>\n\n"
                     f"🆔 ID: <code>{existing_client.id}</code>\n"
                     f"👤 Username: {existing_client.username}\n"
-                    f"📅 Текущая дата истечения: {local_expires.strftime('%d.%m.%Y %H:%M')}\n\n"
+                    f"{expires_info}\n"
                     f"Регистрация отменена.",
                     reply_markup=get_admin_menu_keyboard(),
                 )
@@ -216,15 +243,21 @@ async def process_is_admin(callback: CallbackQuery, state: FSMContext, bot: Bot)
 
             client = await client_service.create_client(username, is_admin=is_admin)
             await client_repo.update(client.id, UpdateClientRequest(expires_at=expires_at))
-            local_expires = expires_at.astimezone(get_timezone())
 
         await _delete_prompt(bot, data)
         admin_label = "✅ Да" if is_admin else "❌ Нет"
+        expires_info = ""
+        if expires_at:
+            local_expires = expires_at.astimezone(get_timezone())
+            expires_info = f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n"
+        else:
+            expires_info = "📅 Подписка: без ограничений (администратор)\n"
+        
         await callback.message.answer(
             f"✅ <b>Клиент зарегистрирован!</b>\n\n"
             f"👤 Telegram ID: <code>{user_id}</code>\n"
             f"🆔 Client ID: <code>{client.id}</code>\n"
-            f"📅 Подписка до: {local_expires.strftime('%d.%m.%Y %H:%M')}\n"
+            f"{expires_info}"
             f"🔐 Администратор: {admin_label}\n\n"
             f"Пользователь может начать использовать бота!",
             reply_markup=get_admin_menu_keyboard(),

@@ -154,3 +154,35 @@ def get_stats_cluster_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="◀️ Назад", callback_data="admin_stats_cluster_list")
     ]])
+
+
+def get_client_register_is_admin_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да", callback_data=f"{prefix}_is_admin_yes"),
+            InlineKeyboardButton(text="❌ Нет", callback_data=f"{prefix}_is_admin_no"),
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
+        [InlineKeyboardButton(text="✖️ Отмена", callback_data=f"{prefix}_cancel")],
+    ])
+
+
+def get_client_register_expiration_date_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"{prefix}_skip_expiration")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
+        [InlineKeyboardButton(text="✖️ Отмена", callback_data=f"{prefix}_cancel")],
+    ])
+
+
+def get_broadcast_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data="broadcast_cancel")
+    ]])
+
+
+def get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Отправить", callback_data="broadcast_confirm"),
+        InlineKeyboardButton(text="❌ Отмена", callback_data="broadcast_cancel"),
+    ]])
