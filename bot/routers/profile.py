@@ -45,8 +45,11 @@ async def profile_handler(message: Message):
             client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
             client = await client_service.get_client(client_id)
 
-            if client.expires_at > get_now():
-                local_expires_at = client.expires_at.astimezone(get_timezone())
+            expires_at = client.expires_at
+            if expires_at is None:
+                subscription_status = "♾️ Без ограничений (администратор)"
+            elif expires_at > get_now():
+                local_expires_at = expires_at.astimezone(get_timezone())
                 subscription_status = SUBSCRIPTION_ACTIVE_TEMPLATE.format(
                     expires_at=local_expires_at.strftime("%d.%m.%Y %H:%M")
                 )

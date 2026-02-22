@@ -141,7 +141,7 @@ async def clients_stats_handler(message: Message):
             client_repo = ClientRepository(api_client)
             clients = await client_repo.list()
 
-            active_count = sum(1 for c in clients if c.expires_at > get_now())
+            active_count = sum(1 for c in clients if c.expires_at is None or c.expires_at > get_now())
             with_keys_count = sum(1 for c in clients if c.peers_count > 0)
 
             text = CLIENTS_STATS_TEMPLATE.format(
