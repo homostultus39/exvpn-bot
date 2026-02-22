@@ -11,6 +11,7 @@ from bot.entities.peer.service import PeerService
 from bot.keyboards.user import get_location_keyboard, get_app_type_keyboard, get_main_menu_keyboard, get_back_to_menu_keyboard
 from bot.messages.user import SELECT_LOCATION, SELECT_APP_TYPE, KEY_RECEIVED_TEMPLATE, MAIN_MENU_MESSAGE, CLIENT_INFO
 from bot.core.exceptions import SubscriptionExpiredException, UserNotRegisteredException
+from bot.management.config_filename import generate_config_filename
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
 
@@ -154,7 +155,7 @@ async def generate_key_handler(callback: CallbackQuery):
                 config_bytes = peer.config.encode("utf-8")
                 config_file = BufferedInputFile(
                     config_bytes,
-                    filename=f"amnezia_{app_type.split('_')[-1]}.conf"
+                    filename=generate_config_filename(cluster.name)
                 )
                 await callback.message.answer_document(
                     document=config_file,

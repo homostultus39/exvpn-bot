@@ -17,6 +17,7 @@ from bot.messages.user import (
     MAIN_MENU_MESSAGE,
     CLIENT_INFO
 )
+from bot.management.config_filename import generate_config_filename
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
 
@@ -119,7 +120,7 @@ async def my_keys_handler(callback: CallbackQuery):
                 fresh_peer = await peer_repo.get(peer.id)
                 if fresh_peer.config:
                     config_bytes = fresh_peer.config.encode("utf-8")
-                    filename = f"amnezia_{peer.app_type.split('_')[-1]}.conf"
+                    filename = generate_config_filename(cluster_name)
                     config_file = BufferedInputFile(config_bytes, filename=filename)
                     await callback.message.answer_document(document=config_file, caption=caption)
                 else:
