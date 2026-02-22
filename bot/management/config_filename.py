@@ -136,4 +136,3 @@ def generate_config_filename(location_name: str) -> str:
         slug = "config"
 
     return f"{slug}_exvpn.conf"
-
