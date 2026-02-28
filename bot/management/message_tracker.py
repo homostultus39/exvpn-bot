@@ -6,7 +6,7 @@ State is lost on bot restart (acceptable for UX purposes).
 
 from aiogram import Bot
 
-_last_messages: dict[int, list[int]] = {}  # {chat_id: [message_ids]}
+_last_messages: dict[int, list[int]] = {}
 
 
 def store(chat_id: int, *message_ids: int) -> None:

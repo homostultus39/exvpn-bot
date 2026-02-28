@@ -2,7 +2,7 @@ from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
 from bot.database.connection import sessionmaker
-from bot.database.management.operations.telegram_admin import get_admin_by_user_id
+from bot.database.management.operations.user import get_admin_by_user_id
 
 
 class AdminMiddleware(BaseMiddleware):

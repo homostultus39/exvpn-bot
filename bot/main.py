@@ -10,35 +10,31 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from aiohttp import web
 
+from bot.database.management.default.trial import seed_trial_subscription
+from bot.database.management.operations.user import update_user_subscription
 from bot.management.settings import get_settings
 from bot.routers.start import router as start_router
-from bot.routers.locations import router as locations_router
+# from bot.routers.locations import router as locations_router
 from bot.routers.subscription import router as subscription_router
-from bot.routers.profile import router as profile_router
+# from bot.routers.profile import router as profile_router
 from bot.routers.error_report import router as error_report_router
-from bot.routers.admin.main import router as admin_main_router
-from bot.routers.admin.clusters import router as admin_clusters_router
-from bot.routers.admin.cluster_create import router as admin_cluster_create_router
-from bot.routers.admin.clients import router as admin_clients_router
-from bot.routers.admin.client_register import router as admin_client_register_router
-from bot.routers.admin.statistics import router as admin_statistics_router
-from bot.routers.admin.tariffs import router as admin_tariffs_router
-from bot.routers.admin.broadcast import router as admin_broadcast_router
-from bot.routers.admin.support import router as admin_support_router
+# from bot.routers.admin.main import router as admin_main_router
+# from bot.routers.admin.clusters import router as admin_clusters_router
+# from bot.routers.admin.cluster_create import router as admin_cluster_create_router
+# from bot.routers.admin.clients import router as admin_clients_router
+# from bot.routers.admin.client_register import router as admin_client_register_router
+# from bot.routers.admin.statistics import router as admin_statistics_router
+# from bot.routers.admin.tariffs import router as admin_tariffs_router
+# from bot.routers.admin.broadcast import router as admin_broadcast_router
+# from bot.routers.admin.support import router as admin_support_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
 from bot.database.management.default.admins import seed_admins
 from bot.database.management.operations.pending_payment import (
     get_pending_by_order_id,
     delete_pending_payment,
 )
-from bot.database.connection import sessionmaker
+from bot.database.connection import get_session, sessionmaker
 from bot.management.logger import configure_logger
-from bot.entities.client.repository import ClientRepository
-from bot.entities.client.service import ClientService
-from bot.entities.tariff.repository import TariffRepository
-from bot.entities.tariff.service import TariffService
-from bot.entities.subscription.service import SubscriptionService
-from bot.management.dependencies import get_api_client
 
 settings = get_settings()
 logger = configure_logger("EXVPN_BOT", "blue")
@@ -106,33 +102,21 @@ async def rukassa_webhook(request: web.Request) -> web.Response:
                     logger.warning(f"Rukassa webhook: pending not found for order {order_id}")
                     return web.Response(text="OK")
 
-                telegram_id = pending.telegram_id
+                user_id = pending.user_id
                 tariff_code = pending.tariff_code
-                is_extension = pending.is_extension
                 record_id = pending.id
+                async with get_session() as session:
+                    await update_user_subscription(session, user_id, tariff_code)
 
-            api_client = get_api_client()
-            async with api_client:
-                client_repo = ClientRepository(api_client)
-                client_service = ClientService(client_repo)
-                tariff_repo = TariffRepository(api_client)
-                tariff_service = TariffService(tariff_repo)
-                subscription_service = SubscriptionService(client_service, tariff_service)
-                client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
-                if is_extension:
-                    await subscription_service.extend_subscription(client_id, tariff_code)
-                else:
-                    await subscription_service.buy_subscription(client_id, tariff_code)
-
-            async with sessionmaker() as session:
+            async with get_session() as session:
                 await delete_pending_payment(session, record_id)
 
             await bot.send_message(
-                chat_id=telegram_id,
+                chat_id=user_id,
                 text="✅ <b>Оплата через Rukassa подтверждена!</b>\n\n"
                      "Подписка активирована. Используйте кнопку <b>🔑 Получить ключ</b>.",
             )
-            logger.info(f"Rukassa webhook: subscription activated for user {telegram_id}, order {order_id}")
+            logger.info(f"Rukassa webhook: subscription activated for user {user_id}, order {order_id}")
 
         return web.Response(text="OK")
 
@@ -154,29 +138,31 @@ async def start_webhook_server() -> None:
 async def start_polling():
     run_migrations()
     await seed_admins()
+    await seed_trial_subscription()
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.message.outer_middleware(FsmCancelOnMenuMiddleware())
 
     dp.include_router(start_router)
-    dp.include_router(locations_router)
+    # dp.include_router(locations_router)
     dp.include_router(subscription_router)
-    dp.include_router(profile_router)
+    # dp.include_router(profile_router)
     dp.include_router(error_report_router)
 
-    dp.include_router(admin_main_router)
-    dp.include_router(admin_clusters_router)
-    dp.include_router(admin_cluster_create_router)
-    dp.include_router(admin_clients_router)
-    dp.include_router(admin_client_register_router)
-    dp.include_router(admin_statistics_router)
-    dp.include_router(admin_tariffs_router)
-    dp.include_router(admin_broadcast_router)
-    dp.include_router(admin_support_router)
+    # dp.include_router(admin_main_router)
+    # dp.include_router(admin_clusters_router)
+    # dp.include_router(admin_cluster_create_router)
+    # dp.include_router(admin_clients_router)
+    # dp.include_router(admin_client_register_router)
+    # dp.include_router(admin_statistics_router)
+    # dp.include_router(admin_tariffs_router)
+    # dp.include_router(admin_broadcast_router)
+    # dp.include_router(admin_support_router)
 
     logger.info("Bot starting...")
     await setup_commands()
-    asyncio.create_task(start_webhook_server())
+    logger.info(settings.api_token)
+    # asyncio.create_task(start_webhook_server())
     await dp.start_polling(bot)
 
 

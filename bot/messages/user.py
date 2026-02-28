@@ -1,18 +1,9 @@
 CLIENT_INFO = """📱 <b>Клиенты для подключения:</b>
 
-🖥 Windows / Linux / Android → <b>AmneziaVPN</b>
-🍎 macOS / iOS → <b>AmneziaWG</b>
-
-
-📌 <b>ВАЖНОЕ ПРИМЕЧАНИЕ</b>
-
-
-⚠️ В Play Market приложение AmneziaVPN на момент написания этого текста <b>устарело</b>!
-
-📥 <b>Скачивайте актуальную версию:</b>
-🔗 <a href="https://github.com/amnezia-vpn/amnezia-client/releases">GitHub Releases</a>
-
-👉 В последнем релизе выберите вашу платформу и установите на устройство."""
+🖥 Windows / Linux → <b>Happ</b>
+🤖 Android → <b>v2rayNG, Nekobox</b>
+🍎 iOS → <b>Streisand, Nekobox</b>
+"""
 
 
 WELCOME_MESSAGE = """╔═══════════════════════╗
@@ -32,7 +23,7 @@ WELCOME_MESSAGE = """╔══════════════════�
 Нажимая кнопку "✅ Согласен", вы принимаете условия обоих документов."""
 
 
-TRIAL_MESSAGE = """🎁 <b>Вам активирован пробный период на 1 день!</b>
+TRIAL_MESSAGE = """🎁 <b>Вам активирован пробный период на 2 дня!</b>
 
 Это время, чтобы убедиться в качестве нашего сервиса.
 По истечении — выберите удобный тариф в разделе 💎 Подписка."""
@@ -59,14 +50,6 @@ SELECT_LOCATION = """🌍 <b>Выбор локации</b>
 Выберите регион для подключения:"""
 
 
-SELECT_APP_TYPE = """🌍 <b>Регион: {cluster_name}</b>
-
-📱 Выберите приложение для подключения:
-
-🖥 Windows / Linux / Android → <b>AmneziaVPN</b>
-🍎 macOS / iOS → <b>AmneziaWG</b>"""
-
-
 PROFILE_MESSAGE_TEMPLATE = """👤 <b>Мой профиль</b>
 
 📱 Telegram ID: <code>{telegram_id}</code>
@@ -85,7 +68,7 @@ SUBSCRIPTION_EXPIRED = "❌ Подписка истекла"
 KEY_RECEIVED_TEMPLATE = """✅ <b>Ключ получен!</b>
 
 🌍 Регион: {location}
-📱 Тип: {app_type}
+🔑 Ключ: `{key}`
 
 Ваш конфигурационный файл готов к использованию."""
 
@@ -93,5 +76,5 @@ KEY_RECEIVED_TEMPLATE = """✅ <b>Ключ получен!</b>
 KEY_ALREADY_EXISTS_TEMPLATE = """ℹ️ <b>Ключ уже существует</b>
 
 🌍 Регион: {location}
-
-Вы уже получали ключ для этого региона. Отправляю существующий конфиг."""
+🔑 Ключ: `{key}`
+Вы уже получали ключ для этого региона. Отправил существующий конфиг."""

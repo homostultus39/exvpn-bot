@@ -2,82 +2,66 @@ from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from bot.management.settings import get_settings
-from bot.management.dependencies import get_api_client
-from bot.entities.client.repository import ClientRepository
-from bot.entities.client.service import ClientService
 from bot.keyboards.user import get_agreement_keyboard, get_main_menu_keyboard
-from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO, TRIAL_MESSAGE
+from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
-from bot.database.connection import sessionmaker
-from bot.database.management.operations.telegram_admin import get_admin_by_user_id
+from bot.database.connection import get_session
+from bot.database.management.operations.user import get_user_by_user_id, get_or_create_user_record, make_terms_confirmed
+
 
 router = Router()
 settings = get_settings()
 logger = configure_logger("START_ROUTER", "green")
 
-agreed_users = set()
-
 
 @router.message(CommandStart())
 async def start_command_handler(message: Message):
-    telegram_id = message.from_user.id
+    user_id = message.from_user.id
+    try:
+        async with get_session() as session:
+            existing_record = await get_user_by_user_id(session, user_id)
 
-    if telegram_id in agreed_users:
-        await message.delete()
-        await delete_last(message.bot, message.chat.id)
-        sent_info = await message.answer(CLIENT_INFO)
-        sent_menu = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-        store(message.chat.id, sent_info.message_id, sent_menu.message_id)
-    else:
-        await message.answer(
-            WELCOME_MESSAGE,
-            reply_markup=get_agreement_keyboard(settings)
-        )
+            is_confirmed = False
+            if existing_record:
+                is_confirmed = True if existing_record.aggreed_to_terms else False
+
+            if is_confirmed:
+                await message.delete()
+                await delete_last(message.bot, message.chat.id)
+                sent_info = await message.answer(CLIENT_INFO)
+                sent_menu = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+                store(message.chat.id, sent_info.message_id, sent_menu.message_id)
+            else:
+                await get_or_create_user_record(session, user_id)
+                logger.info(f"User with user_id {user_id} was created")
+                await message.answer(
+                    WELCOME_MESSAGE,
+                    reply_markup=get_agreement_keyboard(settings)
+                )
+    except Exception as e:
+        logger.error(f"Failed to get or create user with user_id {user_id}: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже или обратитесь к администратору")
 
 
 @router.callback_query(F.data == "agree_to_terms")
 async def agree_to_terms_handler(callback: CallbackQuery):
-    telegram_id = callback.from_user.id
+    user_id = callback.from_user.id
 
     try:
-        async with sessionmaker() as db_session:
-            admin = await get_admin_by_user_id(db_session, telegram_id)
-            is_admin = admin is not None
+        async with get_session() as session:
+            await make_terms_confirmed(session, user_id)
 
-        api_client = get_api_client()
-        async with api_client:
-            client_repo = ClientRepository(api_client)
-            client_service = ClientService(client_repo)
+        logger.info(f"User with user_id {user_id} accepted terms")
 
-            _, is_new = await client_service.get_or_create_by_telegram_id(telegram_id, is_admin=is_admin)
-            agreed_users.add(telegram_id)
+        await callback.answer("✅ Принято!")
+        await callback.message.delete()
 
-            logger.info(f"User {telegram_id} accepted terms and registered (new={is_new})")
+        chat_id = callback.message.chat.id
 
-            await callback.answer("✅ Принято!")
-            await callback.message.delete()
-
-            chat_id = callback.message.chat.id
-            if is_new and not is_admin:
-                await callback.message.answer(TRIAL_MESSAGE)
-                sent_info = await callback.message.answer(CLIENT_INFO)
-                sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-                store(chat_id, sent_info.message_id, sent_menu.message_id)
-            else:
-                sent_info = await callback.message.answer(CLIENT_INFO)
-                sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-                store(chat_id, sent_info.message_id, sent_menu.message_id)
+        sent_info = await callback.message.answer(CLIENT_INFO)
+        sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+        store(chat_id, sent_info.message_id, sent_menu.message_id)
     except Exception as e:
-        logger.error(f"Failed to register user {telegram_id}: {e}")
-        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
-
-
-@router.callback_query(F.data == "back_to_menu")
-async def back_to_menu_handler(callback: CallbackQuery):
-    await callback.message.delete()
-    chat_id = callback.message.chat.id
-    sent_info = await callback.message.answer(CLIENT_INFO)
-    sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
-    store(chat_id, sent_info.message_id, sent_menu.message_id)
-    await callback.answer()
+        logger.error(f"Failed to make edits in database for {user_id}: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже или обратитесь к администратору", show_alert=True)

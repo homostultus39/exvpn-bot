@@ -29,8 +29,8 @@ def get_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
 def get_cluster_actions_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
-            text="🔄 Перезапустить",
-            callback_data=f"admin_cluster_restart_{cluster_id}"
+            text="✏️ Редактировать",
+            callback_data=f"admin_cluster_edit_{cluster_id}"
         )],
         [InlineKeyboardButton(
             text="🗑 Удалить",
@@ -131,7 +131,7 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🌐 По кластеру", callback_data="admin_stats_cluster_list"),
     ]])
 
-
+# TODO: Обновить вывод
 def get_stats_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
     buttons = []
     for cluster in clusters:

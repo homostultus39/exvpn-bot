@@ -7,10 +7,7 @@ class Settings(BaseSettings):
     api_token: str
     admin_ids: str
     timezone: str = "UTC"
-
-    central_api_url: str
-    central_api_username: str
-    central_api_password: str
+    trial_period_days: int = 3
 
     privacy_policy_url: str
     user_agreement_url: str

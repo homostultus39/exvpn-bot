@@ -1,54 +1,38 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, LabeledPrice
 
-from bot.management.dependencies import get_api_client
+from bot.database.management.operations.tariffs import get_all_tariffs
+from bot.database.management.operations.user import update_user_subscription, is_trial_used
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
-from bot.database.connection import sessionmaker
+from bot.database.connection import get_session
+
 from bot.database.management.operations.pending_payment import (
     create_pending_payment,
     get_pending_by_order_id,
     get_pending_by_payment_id,
     delete_pending_payment,
 )
-from bot.entities.client.repository import ClientRepository
-from bot.entities.client.service import ClientService
-from bot.entities.tariff.repository import TariffRepository
-from bot.entities.tariff.service import TariffService
-from bot.entities.subscription.service import SubscriptionService
 from bot.keyboards.user import (
+    get_main_menu_keyboard,
     get_subscription_keyboard,
     get_payment_method_keyboard,
     get_check_payment_keyboard,
-    get_back_to_menu_keyboard,
 )
-from bot.messages.user import SUBSCRIPTION_REQUIRED
+from bot.messages.user import CLIENT_INFO, MAIN_MENU_MESSAGE, SUBSCRIPTION_REQUIRED
+from bot.middlewares.terms import AcceptedTermsMiddleware
 import bot.payments.rukassa as rukassa_client
 import bot.payments.yookassa as yookassa_client
 
 router = Router()
+router.message.middleware(AcceptedTermsMiddleware())
+router.callback_query.middleware(AcceptedTermsMiddleware())
 logger = configure_logger("SUBSCRIPTION_ROUTER", "yellow")
 
 
-async def _get_services():
-    api_client = get_api_client()
-    return api_client
-
-
-async def _activate_subscription(telegram_id: int, tariff_code: str, is_extension: bool) -> None:
-    api_client = get_api_client()
-    async with api_client:
-        client_repo = ClientRepository(api_client)
-        client_service = ClientService(client_repo)
-        tariff_repo = TariffRepository(api_client)
-        tariff_service = TariffService(tariff_repo)
-        subscription_service = SubscriptionService(client_service, tariff_service)
-
-        client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
-        if is_extension:
-            await subscription_service.extend_subscription(client_id, tariff_code)
-        else:
-            await subscription_service.buy_subscription(client_id, tariff_code)
+async def _activate_subscription(user_id: int, tariff_code: str) -> None:
+    async with get_session() as session:
+        await update_user_subscription(session, user_id, tariff_code)
 
 
 @router.message(F.text == "💎 Подписка")
@@ -57,23 +41,9 @@ async def subscription_menu_handler(message: Message):
     await delete_last(message.bot, message.chat.id)
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
-
-        if not tariffs_response.enabled or not tariffs_response.tariffs:
-            sent = await message.answer(
-                "⚠️ <b>Подписки временно недоступны</b>\n\nОбратитесь к администратору.",
-                reply_markup=get_back_to_menu_keyboard()
-            )
-            store(message.chat.id, sent.message_id)
-            return
-
         sent = await message.answer(
             SUBSCRIPTION_REQUIRED,
-            reply_markup=get_subscription_keyboard(tariffs_response.tariffs, is_extension=False)
+            reply_markup=await get_subscription_keyboard(is_extension=False)
         )
         store(message.chat.id, sent.message_id)
 
@@ -85,34 +55,41 @@ async def subscription_menu_handler(message: Message):
 @router.callback_query(F.data == "back_to_tariffs")
 async def back_to_tariffs_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
-
         await callback.message.edit_text(
             SUBSCRIPTION_REQUIRED,
-            reply_markup=get_subscription_keyboard(tariffs_response.tariffs, is_extension=False)
+            reply_markup=await get_subscription_keyboard(is_extension=False)
         )
         await callback.answer()
     except Exception as e:
         logger.error(f"back_to_tariffs_handler: {e}")
         await callback.answer("❌ Ошибка", show_alert=True)
 
+@router.callback_query(F.data == "trial")
+async def trial_handler(callback: CallbackQuery):
+    try:
+        async with get_session() as session:
+            if await is_trial_used(session, callback.from_user.id):
+                await callback.answer("❌ Вы уже использовали пробный период", show_alert=True)
+                return
+
+        await _activate_subscription(callback.from_user.id, "trial")
+        await callback.message.edit_text(
+            "✅ <b>Пробный период активирован!</b>\n\n"
+            "Подписка активна на 3 дня.\n"
+            "Используйте кнопку <b>🔑 Получить ключ</b> для подключения."
+        )
+        await callback.answer("Пробный период активирован")
+
+    except Exception as e:
+        logger.error(f"trial_handler: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
 
 @router.callback_query(F.data == "extend_subscription")
 async def extend_subscription_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
-
         await callback.message.edit_text(
             "💎 <b>Продление подписки</b>\n\nВыберите тариф:",
-            reply_markup=get_subscription_keyboard(tariffs_response.tariffs, is_extension=True)
+            reply_markup=await get_subscription_keyboard(is_extension=True)
         )
         await callback.answer()
     except Exception as e:
@@ -134,13 +111,10 @@ async def extend_select_payment(callback: CallbackQuery):
 
 async def _show_payment_methods(callback: CallbackQuery, tariff_code: str, is_extension: bool):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
-        tariff = next((t for t in tariffs_response.tariffs if t.code == tariff_code), None)
+        tariff = next((t for t in tariffs if t.code == tariff_code), None)
         if not tariff:
             await callback.answer("❌ Тариф не найден", show_alert=True)
             return
@@ -171,13 +145,10 @@ async def pay_stars_handler(callback: CallbackQuery, bot: Bot):
     is_extension = prefix == "extend"
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
-        tariff = next((t for t in tariffs_response.tariffs if t.code == tariff_code), None)
+        tariff = next((t for t in tariffs if t.code == tariff_code), None)
         if not tariff:
             await callback.answer("❌ Тариф не найден", show_alert=True)
             return
@@ -213,17 +184,17 @@ async def pre_checkout_handler(pre_checkout_query):
 @router.message(F.successful_payment)
 async def successful_payment_handler(message: Message):
     payload = message.successful_payment.invoice_payload
-    telegram_id = message.from_user.id
-    logger.info(f"Stars payment success: {telegram_id} payload={payload}")
+    user_id = message.from_user.id
+    logger.info(f"Stars payment success: {user_id} payload={payload}")
 
     try:
-        # payload format: stars_{tariff_code}_{action}_{telegram_id}
+        # payload format: stars_{tariff_code}_{action}_{user_id}
         parts = payload.split("_")
         action = parts[-2]
         tariff_code = "_".join(parts[1:-2])
         is_extension = action == "extend"
 
-        await _activate_subscription(telegram_id, tariff_code, is_extension)
+        await _activate_subscription(user_id, tariff_code)
 
         verb = "продлена" if is_extension else "активирована"
         await message.answer(
@@ -231,7 +202,7 @@ async def successful_payment_handler(message: Message):
             f"Подписка {verb}.\n"
             f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения."
         )
-        logger.info(f"Stars subscription activated: user={telegram_id} tariff={tariff_code}")
+        logger.info(f"Stars subscription activated: user={user_id} tariff={tariff_code}")
 
     except Exception as e:
         logger.error(f"successful_payment_handler: {e}")
@@ -246,19 +217,16 @@ async def pay_rukassa_handler(callback: CallbackQuery):
     is_extension = prefix == "extend"
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
-        tariff = next((t for t in tariffs_response.tariffs if t.code == tariff_code), None)
+        tariff = next((t for t in tariffs if t.code == tariff_code), None)
         if not tariff:
             await callback.answer("❌ Тариф не найден", show_alert=True)
             return
 
         result = await rukassa_client.create_payment(
-            telegram_id=callback.from_user.id,
+            user_id=callback.from_user.id,
             amount=tariff.price_rub,
             tariff_code=tariff_code,
             is_extension=is_extension,
@@ -270,10 +238,10 @@ async def pay_rukassa_handler(callback: CallbackQuery):
 
         order_id = result["order_id"]
 
-        async with sessionmaker() as session:
+        async with get_session() as session:
             await create_pending_payment(
                 session=session,
-                telegram_id=callback.from_user.id,
+                user_id=callback.from_user.id,
                 tariff_code=tariff_code,
                 is_extension=is_extension,
                 payment_method="rukassa",
@@ -306,20 +274,20 @@ async def check_rukassa_handler(callback: CallbackQuery):
         result = await rukassa_client.check_payment(order_id)
 
         if result["status"] == "PAID":
-            async with sessionmaker() as session:
+            async with get_session() as session:
                 pending = await get_pending_by_order_id(session, order_id)
                 if not pending:
                     await callback.answer("❌ Платёж не найден", show_alert=True)
                     return
 
-                telegram_id = pending.telegram_id
+                user_id = pending.user_id
                 tariff_code = pending.tariff_code
                 is_extension = pending.is_extension
                 record_id = pending.id
 
-            await _activate_subscription(telegram_id, tariff_code, is_extension)
+            await _activate_subscription(user_id, tariff_code)
 
-            async with sessionmaker() as session:
+            async with get_session() as session:
                 await delete_pending_payment(session, record_id)
 
             verb = "продлена" if is_extension else "активирована"
@@ -348,19 +316,15 @@ async def pay_yookassa_handler(callback: CallbackQuery):
     is_extension = prefix == "extend"
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
+        tariffs = await get_all_tariffs(get_session())
 
-        tariff = next((t for t in tariffs_response.tariffs if t.code == tariff_code), None)
+        tariff = next((t for t in tariffs if t.code == tariff_code), None)
         if not tariff:
             await callback.answer("❌ Тариф не найден", show_alert=True)
             return
 
         result = await yookassa_client.create_payment(
-            telegram_id=callback.from_user.id,
+            user_id=callback.from_user.id,
             amount=tariff.price_rub,
             tariff_code=tariff_code,
             tariff_name=tariff.name,
@@ -372,10 +336,10 @@ async def pay_yookassa_handler(callback: CallbackQuery):
             await callback.answer("❌ Ошибка создания платежа. Попробуйте позже.", show_alert=True)
             return
 
-        async with sessionmaker() as session:
+        async with get_session() as session:
             await create_pending_payment(
                 session=session,
-                telegram_id=callback.from_user.id,
+                user_id=callback.from_user.id,
                 tariff_code=tariff_code,
                 is_extension=is_extension,
                 payment_method="yookassa",
@@ -409,20 +373,20 @@ async def check_yookassa_handler(callback: CallbackQuery):
         result = await yookassa_client.check_payment(payment_id)
 
         if result["status"] == "PAID":
-            async with sessionmaker() as session:
+            async with get_session() as session:
                 pending = await get_pending_by_payment_id(session, payment_id)
                 if not pending:
                     await callback.answer("❌ Платёж не найден", show_alert=True)
                     return
 
-                telegram_id = pending.telegram_id
+                user_id = pending.user_id
                 tariff_code = pending.tariff_code
                 is_extension = pending.is_extension
                 record_id = pending.id
 
-            await _activate_subscription(telegram_id, tariff_code, is_extension)
+            await _activate_subscription(user_id, tariff_code)
 
-            async with sessionmaker() as session:
+            async with get_session() as session:
                 await delete_pending_payment(session, record_id)
 
             verb = "продлена" if is_extension else "активирована"
@@ -446,17 +410,21 @@ async def check_yookassa_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "cancel_payment")
 async def cancel_payment_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs_response = await tariff_service.get_active_tariffs()
-
         await callback.message.edit_text(
             SUBSCRIPTION_REQUIRED,
-            reply_markup=get_subscription_keyboard(tariffs_response.tariffs, is_extension=False)
+            reply_markup=await get_subscription_keyboard(is_extension=False)
         )
         await callback.answer("Платёж отменён")
     except Exception as e:
         logger.error(f"cancel_payment_handler: {e}")
         await callback.answer("❌ Ошибка", show_alert=True)
+
+
+@router.callback_query(F.data == "back_to_menu")
+async def back_to_menu_handler(callback: CallbackQuery):
+    await callback.message.delete()
+    chat_id = callback.message.chat.id
+    sent_info = await callback.message.answer(CLIENT_INFO)
+    sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
+    store(chat_id, sent_info.message_id, sent_menu.message_id)
+    await callback.answer()

@@ -1,8 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from bot.management.settings import Settings
-from bot.entities.cluster.models import ClusterWithStatusResponse
-from bot.entities.tariff.models import TariffResponse
-
+from bot.database.management.operations.tariffs import get_all_tariffs
+from bot.database.connection import get_session
 
 def get_agreement_keyboard(settings: Settings) -> InlineKeyboardMarkup:
     buttons = [
@@ -30,19 +29,19 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
-
-def get_location_keyboard(clusters: list[ClusterWithStatusResponse]) -> InlineKeyboardMarkup:
-    buttons = []
-    for cluster in clusters:
-        buttons.append([InlineKeyboardButton(
-            text=cluster.name,
-            callback_data=f"loc:{cluster.id}"
-        )])
-    buttons.append([InlineKeyboardButton(
-        text="◀️ Назад",
-        callback_data="back_to_menu"
-    )])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+# # TODO: заменить на динамические кнопки с локациями из БД
+# def get_location_keyboard(clusters: list[ClusterWithStatusResponse]) -> InlineKeyboardMarkup:
+#     buttons = []
+#     for cluster in clusters:
+#         buttons.append([InlineKeyboardButton(
+#             text=cluster.name,
+#             callback_data=f"loc:{cluster.id}"
+#         )])
+#     buttons.append([InlineKeyboardButton(
+#         text="◀️ Назад",
+#         callback_data="back_to_menu"
+#     )])
+#     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_app_type_keyboard(cluster_id: str, cluster_name: str) -> InlineKeyboardMarkup:
@@ -62,15 +61,27 @@ def get_app_type_keyboard(cluster_id: str, cluster_name: str) -> InlineKeyboardM
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-def get_subscription_keyboard(tariffs: list[TariffResponse], is_extension: bool = False) -> InlineKeyboardMarkup:
+async def get_subscription_keyboard(is_extension: bool = False) -> InlineKeyboardMarkup:
     prefix = "extend_" if is_extension else "buy_"
     buttons = []
+    async with get_session() as session:
+        tariffs = await get_all_tariffs(session)
+
     for tariff in tariffs:
-        buttons.append([InlineKeyboardButton(
-            text=f"{tariff.name} ({tariff.price_stars} ⭐ / {tariff.price_rub} ₽)",
-            callback_data=f"{prefix}{tariff.code}"
-        )])
+        if tariff.code == "trial":
+            buttons.append([
+                InlineKeyboardButton(
+                text=tariff.name,
+                callback_data=tariff.code
+            )
+            ])
+        else:
+            buttons.append([
+                InlineKeyboardButton(
+                text=f"{tariff.name} ({tariff.price_stars} ⭐ / {tariff.price_rub} ₽)",
+                callback_data=f"{prefix}{tariff.code}"
+                )
+            ])
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад",
         callback_data="back_to_menu"

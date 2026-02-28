@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from bot.database.base import Base
-from bot.database.models import TelegramAdminModel, ReportModel, PendingPaymentModel
+from bot.database.models import UserModel, ReportModel, PendingPaymentModel, ClusterModel, TariffModel
 from bot.management.settings import get_settings
 
 settings = get_settings()

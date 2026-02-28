@@ -4,12 +4,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 
-from bot.database.connection import sessionmaker
+from bot.database.connection import get_session
 from bot.database.management.operations.report import create_ticket
 from bot.keyboards.user import get_error_report_cancel_keyboard
 from bot.management.logger import configure_logger
+from bot.middlewares.terms import AcceptedTermsMiddleware
 
 router = Router()
+router.message.middleware(AcceptedTermsMiddleware())
+router.callback_query.middleware(AcceptedTermsMiddleware())
 logger = configure_logger("ERROR_REPORT", "yellow")
 
 PREFIX = "er"
@@ -55,7 +58,7 @@ async def error_report_message(message: Message, state: FSMContext, bot: Bot):
         pass
 
     try:
-        async with sessionmaker() as session:
+        async with get_session() as session:
             await create_ticket(session, user_id=user_id, message=text)
 
         await bot.edit_message_text(

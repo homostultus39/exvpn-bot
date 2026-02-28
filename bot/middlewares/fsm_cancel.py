@@ -4,7 +4,6 @@ from aiogram import BaseMiddleware, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from bot.management.fsm_utils import cancel_active_fsm
 
 MENU_BUTTON_TEXTS: frozenset[str] = frozenset({
     # User menu
@@ -21,6 +20,19 @@ MENU_BUTTON_TEXTS: frozenset[str] = frozenset({
     "📋 Обращения",
     "◀️ Выход из админ-панели",
 })
+
+
+async def cancel_active_fsm(state: FSMContext, bot: Bot) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    data = await state.get_data()
+    if "prompt_msg_id" in data and "prompt_chat_id" in data:
+        try:
+            await bot.delete_message(data["prompt_chat_id"], data["prompt_msg_id"])
+        except Exception:
+            pass
+    await state.clear()
 
 
 class FsmCancelOnMenuMiddleware(BaseMiddleware):
