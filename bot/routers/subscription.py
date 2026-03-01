@@ -261,7 +261,7 @@ async def pay_rukassa_handler(callback: CallbackQuery):
         async with get_session() as session:
             await create_pending_payment(
                 session=session,
-                user_id=callback.from_user.id,
+                telegram_id=callback.from_user.id,
                 tariff_code=tariff_code,
                 is_extension=is_extension,
                 payment_method="rukassa",
@@ -360,7 +360,7 @@ async def pay_yookassa_handler(callback: CallbackQuery):
         async with get_session() as session:
             await create_pending_payment(
                 session=session,
-                user_id=callback.from_user.id,
+                telegram_id=callback.from_user.id,
                 tariff_code=tariff_code,
                 is_extension=is_extension,
                 payment_method="yookassa",

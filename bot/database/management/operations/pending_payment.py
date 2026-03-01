@@ -15,7 +15,7 @@ async def create_pending_payment(
     payment_id: str | None = None,
 ) -> PendingPaymentModel:
     record = PendingPaymentModel(
-        telegram_id=telegram_id,
+        user_id=telegram_id,
         tariff_code=tariff_code,
         is_extension=is_extension,
         payment_method=payment_method,
