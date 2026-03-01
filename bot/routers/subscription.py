@@ -13,7 +13,6 @@ from bot.database.connection import get_session
 
 from bot.database.management.operations.pending_payment import (
     create_pending_payment,
-    get_pending_by_order_id,
     get_pending_by_payment_id,
     delete_pending_payment,
 )
@@ -26,7 +25,6 @@ from bot.keyboards.user import (
 )
 from bot.messages.user import CLIENT_INFO, MAIN_MENU_MESSAGE, SUBSCRIPTION_REQUIRED
 from bot.middlewares.terms import AcceptedTermsMiddleware
-import bot.payments.rukassa as rukassa_client
 import bot.payments.yookassa as yookassa_client
 
 router = Router()
@@ -228,106 +226,6 @@ async def successful_payment_handler(message: Message):
     except Exception as e:
         logger.error(f"successful_payment_handler: {e}")
         await message.answer("❌ Ошибка активации подписки. Обратитесь в поддержку.")
-
-
-@router.callback_query(F.data.startswith("pay_rukassa_"))
-async def pay_rukassa_handler(callback: CallbackQuery):
-    parts = callback.data.split("_")
-    prefix = parts[-1]
-    tariff_code = "_".join(parts[2:-1])
-    is_extension = prefix == "extend"
-
-    try:
-        async with get_session() as session:
-            tariffs = await get_all_tariffs(session)
-
-        tariff = next((t for t in tariffs if t.code == tariff_code), None)
-        if not tariff:
-            await callback.answer("❌ Тариф не найден", show_alert=True)
-            return
-
-        result = await rukassa_client.create_payment(
-            telegram_id=callback.from_user.id,
-            amount=tariff.price_rub,
-            tariff_code=tariff_code,
-            is_extension=is_extension,
-        )
-
-        if not result["success"]:
-            await callback.answer("❌ Ошибка создания платежа. Попробуйте позже.", show_alert=True)
-            return
-
-        order_id = result["order_id"]
-
-        async with get_session() as session:
-            await create_pending_payment(
-                session=session,
-                telegram_id=callback.from_user.id,
-                tariff_code=tariff_code,
-                is_extension=is_extension,
-                payment_method="rukassa",
-                amount=tariff.price_rub,
-                order_id=order_id,
-            )
-
-        await callback.message.edit_text(
-            f"🔵 <b>Оплата через Rukassa</b>\n\n"
-            f"📦 Тариф: <b>{tariff.name}</b> ({tariff.days} дней)\n"
-            f"💰 Сумма: <b>{tariff.price_rub} ₽</b>\n\n"
-            f'<a href="{result["url"]}">👉 Перейти к оплате</a>\n\n'
-            f"После оплаты нажмите кнопку ниже:",
-            reply_markup=get_check_payment_keyboard("ruk", order_id),
-            disable_web_page_preview=True,
-        )
-        await callback.answer()
-
-    except Exception as e:
-        logger.error(f"pay_rukassa_handler: {e}")
-        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
-
-
-@router.callback_query(F.data.startswith("check_ruk_"))
-async def check_rukassa_handler(callback: CallbackQuery):
-    order_id = callback.data.removeprefix("check_ruk_")
-    await callback.answer("⏳ Проверяем...", show_alert=False)
-
-    try:
-        result = await rukassa_client.check_payment(order_id)
-
-        if result["status"] == "PAID":
-            async with get_session() as session:
-                pending = await get_pending_by_order_id(session, order_id)
-                if not pending:
-                    await callback.answer("❌ Платёж не найден", show_alert=True)
-                    return
-
-                user_id = pending.user_id
-                tariff_code = pending.tariff_code
-                is_extension = pending.is_extension
-                record_id = pending.id
-
-            await _activate_subscription(user_id, tariff_code)
-
-            async with get_session() as session:
-                await delete_pending_payment(session, record_id)
-
-            verb = "продлена" if is_extension else "активирована"
-            await callback.message.edit_text(
-                f"✅ <b>Оплата подтверждена!</b>\n\n"
-                f"Подписка {verb}.\n"
-                f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
-                reply_markup=get_back_to_menu_keyboard(),
-            )
-            logger.info(f"Rukassa payment confirmed: order={order_id}")
-
-        elif result["status"] in ("WAITING", "PENDING", ""):
-            await callback.answer("⏳ Оплата ещё не поступила. Попробуйте через минуту.", show_alert=True)
-        else:
-            await callback.answer("❌ Платёж не найден или отменён.", show_alert=True)
-
-    except Exception as e:
-        logger.error(f"check_rukassa_handler: {e}")
-        await callback.answer("❌ Ошибка проверки платежа.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("pay_yookassa_"))

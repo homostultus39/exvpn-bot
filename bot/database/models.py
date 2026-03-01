@@ -102,7 +102,7 @@ class PendingPaymentModel(Base, UUIDMixin, TimestampMixin):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     tariff_code: Mapped[str] = mapped_column(String(64), nullable=False)
     is_extension: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    payment_method: Mapped[str] = mapped_column(String(16), nullable=False)  # "rukassa" | "yookassa"
+    payment_method: Mapped[str] = mapped_column(String(16), nullable=False)
     order_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
     payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)

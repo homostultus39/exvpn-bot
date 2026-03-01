@@ -73,9 +73,8 @@ PRIVACY_POLICY_URL=https://telegra.ph/your-privacy-policy
 USER_AGREEMENT_URL=https://telegra.ph/your-user-agreement
 
 # Payment (опционально)
-PAYMENT_PROVIDER=rukassa
-RUKASSA_API_KEY=your_key
-RUKASSA_SHOP_ID=your_shop_id
+YOOKASSA_SHOP_ID=your_shop_id
+YOOKASSA_SECRET_KEY=your_secret_key
 
 # Database
 DATABASE_PATH=./data/bot.db

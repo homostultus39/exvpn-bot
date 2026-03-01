@@ -92,10 +92,6 @@ def get_payment_method_keyboard(
             callback_data=f"pay_stars_{tariff_code}_{prefix}"
         )],
         [InlineKeyboardButton(
-            text=f"🔵 Rukassa ({price_rub} ₽)",
-            callback_data=f"pay_rukassa_{tariff_code}_{prefix}"
-        )],
-        [InlineKeyboardButton(
             text=f"💳 YooMoney ({price_rub} ₽)",
             callback_data=f"pay_yookassa_{tariff_code}_{prefix}"
         )],

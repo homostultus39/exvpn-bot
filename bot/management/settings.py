@@ -13,9 +13,6 @@ class Settings(BaseSettings):
     privacy_policy_url: str
     user_agreement_url: str
 
-    rukassa_api_url: str = "https://lk.rukassa.pro/api/v1"
-    rukassa_api_key: str
-    rukassa_shop_id: str
     yookassa_shop_id: str
     yookassa_secret_key: str
 
