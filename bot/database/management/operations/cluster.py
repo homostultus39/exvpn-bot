@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import ClusterModel
+from bot.database.models import ClusterModel, PeerModel
 from bot.management.password import encrypt_password
 
 
@@ -48,10 +48,10 @@ async def get_all_clusters(session: AsyncSession) -> list[ClusterModel]:
 
 
 async def get_clusters_peers_count(session: AsyncSession, cluster_id: UUID) -> int:
-    cluster = await get_cluster_by_id(session, cluster_id)
-    if cluster:
-        return len(cluster.peers)
-    return 0
+    result = await session.execute(
+        select(func.count()).select_from(PeerModel).where(PeerModel.cluster_id == cluster_id)
+    )
+    return int(result.scalar_one_or_none() or 0)
 
 
 async def delete_cluster(session: AsyncSession, cluster_id: UUID) -> bool:
