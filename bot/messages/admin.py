@@ -42,8 +42,6 @@ GLOBAL_STATS_TEMPLATE = """📊 <b>Общая статистика</b>
    ❌ Истёкших: {clients_expired}
 
 🔑 Пиры: {peers_total} (онлайн: {peers_online})
-   📱 AmneziaVPN: {peers_amnezia_vpn}
-   🔒 AmneziaWG: {peers_amnezia_wg}
 
 📶 Трафик:
    ⬇️ Получено: {rx}
@@ -53,14 +51,11 @@ GLOBAL_STATS_TEMPLATE = """📊 <b>Общая статистика</b>
 CLUSTER_STATS_TEMPLATE = """🌐 <b>Статистика кластера: {cluster_name}</b>
 
 📊 Статус: {status}
-🐳 Контейнер: {container_status}
-🔗 Протокол: {protocol}
+🧩 Инбаундов: {inbounds_total}
 
 👥 Клиентов: {clients_total}
 
 🔑 Пиров: {peers_total} (онлайн: {peers_online})
-   📱 AmneziaVPN: {peers_amnezia_vpn}
-   🔒 AmneziaWG: {peers_amnezia_wg}
 
 📶 Трафик:
    ⬇️ Получено: {rx}

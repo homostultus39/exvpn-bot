@@ -44,7 +44,7 @@ def get_cluster_actions_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
 
 def get_cluster_edit_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
     fields = [
-        ("Название", "name"), ("Endpoint", "endpoint"),
+        ("Название", "public_name"), ("Endpoint", "endpoint"),
         ("Username", "username"), ("Password", "password")
     ]
     buttons = [
@@ -145,9 +145,8 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
 def get_stats_clusters_keyboard(clusters: list) -> InlineKeyboardMarkup:
     buttons = []
     for cluster in clusters:
-        status_emoji = "✅" if cluster.is_active else "❌"
         buttons.append([InlineKeyboardButton(
-            text=f"{status_emoji} {cluster.name}",
+            text=f"{cluster.public_name}",
             callback_data=f"admin_stats_cl:{cluster.id}"
         )])
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_stats_back")])

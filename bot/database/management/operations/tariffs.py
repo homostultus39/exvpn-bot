@@ -9,7 +9,7 @@ async def get_or_create_tariff(session: AsyncSession,
                         days: int,
                         price_rub: int | None = None,
                         price_stars: int | None = None,
-                        sort_order: int | None = None) -> TariffModel:
+                        sort_order: int = 0) -> TariffModel:
     existing = await get_tariff_by_code(session, code)
     if existing:
         return existing

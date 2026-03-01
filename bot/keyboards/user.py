@@ -29,37 +29,18 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
-# # TODO: заменить на динамические кнопки с локациями из БД
-# def get_location_keyboard(clusters: list[ClusterWithStatusResponse]) -> InlineKeyboardMarkup:
-#     buttons = []
-#     for cluster in clusters:
-#         buttons.append([InlineKeyboardButton(
-#             text=cluster.name,
-#             callback_data=f"loc:{cluster.id}"
-#         )])
-#     buttons.append([InlineKeyboardButton(
-#         text="◀️ Назад",
-#         callback_data="back_to_menu"
-#     )])
-#     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def get_app_type_keyboard(cluster_id: str, cluster_name: str) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(
-            text="AmneziaVPN",
-            callback_data=f"key:{cluster_id}:amnezia_vpn"
-        )],
-        [InlineKeyboardButton(
-            text="AmneziaWG",
-            callback_data=f"key:{cluster_id}:amnezia_wg"
-        )],
-        [InlineKeyboardButton(
-            text="◀️ Назад",
-            callback_data="back_to_locations"
-        )],
-    ]
+def get_locations_keyboard(clusters: list) -> InlineKeyboardMarkup:
+    buttons = []
+    for cluster in clusters:
+        buttons.append([
+            InlineKeyboardButton(
+                text=cluster.public_name,
+                callback_data=f"key_loc:{cluster.id}",
+            )
+        ])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 async def get_subscription_keyboard(is_extension: bool = False) -> InlineKeyboardMarkup:
     prefix = "extend_" if is_extension else "buy_"

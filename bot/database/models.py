@@ -45,14 +45,19 @@ class UserModel(Base, UUIDMixin, TimestampMixin):
     trial_used: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    peers: Mapped["PeerModel"] = relationship("PeerModel", back_populates="client", cascade="all, delete-orphan", uselist=True)
+    peers: Mapped[list["PeerModel"]] = relationship(
+        "PeerModel",
+        back_populates="client",
+        cascade="all, delete-orphan",
+        uselist=True,
+    )
 
 
 class PeerModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "peers"
 
-    client_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    cluster_id: Mapped[int] = mapped_column(ForeignKey("clusters.id"), nullable=False, index=True)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    cluster_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clusters.id"), nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
 
     client: Mapped["UserModel"] = relationship("UserModel", back_populates="peers")
@@ -64,7 +69,6 @@ class ClusterModel(Base, UUIDMixin, TimestampMixin):
 
     endpoint: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     public_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
-    lowercase_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
 
     encrypted_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

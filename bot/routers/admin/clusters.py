@@ -1,26 +1,39 @@
-from aiogram import Router, F, Bot
+from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from uuid import UUID
+
 from bot.database.connection import get_session
-from bot.database.management.operations.cluster import delete_cluster, get_all_clusters, get_cluster_by_id, get_clusters_peers_count, get_or_create_cluster, update_cluster
-from bot.management.settings import get_settings
-from bot.middlewares.fsm_cancel import cancel_active_fsm
-from bot.middlewares.admin import AdminMiddleware
-from bot.keyboards.admin import get_admin_menu_keyboard, get_cluster_edit_keyboard, get_clusters_keyboard, get_cluster_actions_keyboard, get_fsm_keyboard, get_fsm_keyboard, get_tariff_actions_keyboard
-from bot.messages.admin import CLUSTERS_LIST_TEMPLATE, CLUSTER_INFO_TEMPLATE
+from bot.database.management.operations.cluster import (
+    delete_cluster,
+    get_all_clusters,
+    get_cluster_by_id,
+    get_clusters_peers_count,
+    get_or_create_cluster,
+    update_cluster,
+)
+from bot.keyboards.admin import (
+    get_admin_menu_keyboard,
+    get_cluster_actions_keyboard,
+    get_cluster_edit_keyboard,
+    get_clusters_keyboard,
+    get_fsm_keyboard,
+)
 from bot.management.logger import configure_logger
+from bot.middlewares.admin import AdminMiddleware
+from bot.middlewares.fsm_cancel import cancel_active_fsm
+from bot.messages.admin import CLUSTER_INFO_TEMPLATE, CLUSTERS_LIST_TEMPLATE
 
 router = Router()
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
 
-settings = get_settings()
 logger = configure_logger("ADMIN_CLUSTERS", "red")
 
 _FIELD_LABELS = {
-    "name": "Название",
+    "public_name": "Название",
     "endpoint": "Endpoint",
     "username": "Username",
     "password": "Password",
@@ -43,9 +56,8 @@ async def clusters_list_handler(message: Message, state: FSMContext, bot: Bot):
             clusters = await get_all_clusters(session)
             for cluster in clusters:
                 count_peers = await get_clusters_peers_count(session, cluster.id)
-                for cluster in clusters:
-                    clusters_list += f"<b>{cluster.public_name}</b>\n" 
-                    clusters_list += f"   Пиров: {count_peers}\n\n"
+                clusters_list += f"<b>{cluster.public_name}</b>\n" 
+                clusters_list += f"   Пиров: {count_peers}\n\n"
 
         text = CLUSTERS_LIST_TEMPLATE.format(
             total=len(clusters),
@@ -64,11 +76,15 @@ async def clusters_list_handler(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data.startswith("admin_cluster_view_"))
 async def cluster_info_handler(callback: CallbackQuery):
-    cluster_id = callback.data.removeprefix("admin_cluster_view_")
+    cluster_id_raw = callback.data.removeprefix("admin_cluster_view_")
 
     try:
+        cluster_id = UUID(cluster_id_raw)
         async with get_session() as session:
-            cluster = await get_cluster_by_id(session, int(cluster_id))
+            cluster = await get_cluster_by_id(session, cluster_id)
+            if cluster is None:
+                await callback.answer("❌ Кластер не найден", show_alert=True)
+                return
             peer_count = await get_clusters_peers_count(session, cluster.id)
 
         text = CLUSTER_INFO_TEMPLATE.format(
@@ -122,16 +138,31 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
     value = message.text.strip()
     await message.delete()
     data = await state.get_data()
-    cluster_id = data["cluster_id"]
+    cluster_id_raw = data["cluster_id"]
     field = data["edit_field"]
     label = _FIELD_LABELS.get(field, field)
 
     try:
+        cluster_id = UUID(cluster_id_raw)
         async with get_session() as session:
+            cluster = await get_cluster_by_id(session, cluster_id)
+            if cluster is None:
+                await _edit_prompt(
+                    bot, data, "❌ Кластер не найден.", get_admin_menu_keyboard()
+                )
+                await state.clear()
+                return
             cluster = await update_cluster(
-                session, int(cluster_id),
+                session,
+                cluster.id,
                 **{field: value}
             )
+            if cluster is None:
+                await _edit_prompt(
+                    bot, data, "❌ Кластер не найден.", get_admin_menu_keyboard()
+                )
+                await state.clear()
+                return
             peers_count = await get_clusters_peers_count(session, cluster.id)
         
         await state.clear()
@@ -143,7 +174,9 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             total_peers=peers_count,
         )
         await _edit_prompt(bot, data, text, get_cluster_actions_keyboard(str(cluster.id)))
-        logger.info(f"Cluster {cluster_id} field '{field}' updated by admin {message.from_user.id}")
+        logger.info(
+            f"Cluster {cluster_id_raw} field '{field}' updated by admin {message.from_user.id}"
+        )
 
     except ValueError:
         await _edit_prompt(
@@ -164,16 +197,21 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data.startswith("admin_cluster_delete_"))
 async def cluster_delete_handler(callback: CallbackQuery):
-    cluster_id = callback.data.removeprefix("admin_cluster_delete_")
+    cluster_id_raw = callback.data.removeprefix("admin_cluster_delete_")
 
     try:
+        cluster_id = UUID(cluster_id_raw)
         async with get_session() as session:
-            deleted = await delete_cluster(session, int(cluster_id))
+            cluster = await get_cluster_by_id(session, cluster_id)
+            if cluster is None:
+                await callback.answer("❌ Кластер не найден", show_alert=True)
+                return
+            deleted = await delete_cluster(session, cluster.id)
 
         if deleted:
             await callback.answer("✅ Кластер удалён", show_alert=True)
             await callback.message.delete()
-            logger.info(f"Cluster {cluster_id} deleted by admin {callback.from_user.id}")
+            logger.info(f"Cluster {cluster_id_raw} deleted by admin {callback.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in cluster_delete_handler: {e}")
@@ -214,7 +252,6 @@ PREFIX = "cc"
 
 class ClusterCreateForm(StatesGroup):
     waiting_for_name = State()
-    waiting_for_lowercase_name = State()
     waiting_for_endpoint = State()
     waiting_for_username = State()
     waiting_for_password = State()
@@ -382,7 +419,7 @@ async def process_cluster_password(message: Message, state: FSMContext, bot: Bot
             f"Проверьте введённые данные и попробуйте снова:",
             get_fsm_keyboard(PREFIX, back=True)
         )
-        await state.set_state(ClusterCreateForm.waiting_for_api_key)
+        await state.set_state(ClusterCreateForm.waiting_for_password)
         return
 
     await state.clear()

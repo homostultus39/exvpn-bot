@@ -1,17 +1,30 @@
 from uuid import UUID
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+
+from aiogram import Bot, F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import StateFilter
-from bot.middlewares.fsm_cancel import cancel_active_fsm
-from bot.middlewares.admin import AdminMiddleware
-from bot.keyboards.admin import (
-    get_tariffs_keyboard, get_tariff_actions_keyboard,
-    get_tariff_edit_keyboard, get_admin_menu_keyboard, get_fsm_keyboard
+from aiogram.types import CallbackQuery, Message
+
+from bot.database.connection import get_session
+from bot.database.management.operations.tariff import (
+    create_tariff,
+    delete_tariff,
+    get_tariff_by_id,
+    update_tariff,
 )
-from bot.messages.admin import TARIFFS_LIST_TEMPLATE, TARIFF_INFO_TEMPLATE
+from bot.database.management.operations.tariffs import get_all_tariffs, get_tariff_by_code
+from bot.keyboards.admin import (
+    get_admin_menu_keyboard,
+    get_fsm_keyboard,
+    get_tariff_actions_keyboard,
+    get_tariff_edit_keyboard,
+    get_tariffs_keyboard,
+)
 from bot.management.logger import configure_logger
+from bot.messages.admin import TARIFF_INFO_TEMPLATE, TARIFFS_LIST_TEMPLATE
+from bot.middlewares.admin import AdminMiddleware
+from bot.middlewares.fsm_cancel import cancel_active_fsm
 
 router = Router()
 logger = configure_logger("ADMIN_TARIFFS", "red")
@@ -67,27 +80,23 @@ async def cancel_tariff_create(callback: CallbackQuery, state: FSMContext):
 async def tariffs_list_handler(message: Message, state: FSMContext, bot: Bot):
     await cancel_active_fsm(state, bot)
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs = await tariff_service.get_all_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
+        active_count = sum(1 for t in tariffs if t.is_active)
 
-            active_count = sum(1 for t in tariffs if t.is_active)
+        tariffs_list = ""
+        for tariff in sorted(tariffs, key=lambda t: t.sort_order):
+            status_emoji = "✅" if tariff.is_active else "❌"
+            tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
+            tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
 
-            tariffs_list = ""
-            for tariff in sorted(tariffs, key=lambda t: t.sort_order):
-                status_emoji = "✅" if tariff.is_active else "❌"
-                tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
-                tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
+        text = TARIFFS_LIST_TEMPLATE.format(
+            total=len(tariffs),
+            active=active_count,
+            tariffs_list=tariffs_list
+        )
 
-            text = TARIFFS_LIST_TEMPLATE.format(
-                total=len(tariffs),
-                active=active_count,
-                tariffs_list=tariffs_list
-            )
-
-            await message.answer(text, reply_markup=get_tariffs_keyboard(tariffs))
+        await message.answer(text, reply_markup=get_tariffs_keyboard(tariffs))
 
     except Exception as e:
         logger.error(f"Error in tariffs_list_handler: {e}")
@@ -99,27 +108,27 @@ async def tariff_info_handler(callback: CallbackQuery):
     tariff_id = callback.data.removeprefix("admin_tariff_view_")
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariff = await tariff_service.get_tariff(UUID(tariff_id))
+        async with get_session() as session:
+            tariff = await get_tariff_by_id(session, UUID(tariff_id))
+        if tariff is None:
+            await callback.answer("❌ Тариф не найден", show_alert=True)
+            return
 
-            status = "✅ Активен" if tariff.is_active else "❌ Неактивен"
+        status = "✅ Активен" if tariff.is_active else "❌ Неактивен"
 
-            text = TARIFF_INFO_TEMPLATE.format(
-                name=tariff.name,
-                code=tariff.code,
-                days=tariff.days,
-                price_rub=tariff.price_rub,
-                price_stars=tariff.price_stars,
-                status=status,
-                sort_order=tariff.sort_order,
-                id=tariff.id
-            )
+        text = TARIFF_INFO_TEMPLATE.format(
+            name=tariff.name,
+            code=tariff.code,
+            days=tariff.days,
+            price_rub=tariff.price_rub,
+            price_stars=tariff.price_stars,
+            status=status,
+            sort_order=tariff.sort_order,
+            id=tariff.id
+        )
 
-            await callback.message.edit_text(text, reply_markup=get_tariff_actions_keyboard(str(tariff.id)))
-            await callback.answer()
+        await callback.message.edit_text(text, reply_markup=get_tariff_actions_keyboard(str(tariff.id)))
+        await callback.answer()
 
     except Exception as e:
         logger.error(f"Error in tariff_info_handler: {e}")
@@ -131,15 +140,15 @@ async def tariff_delete_handler(callback: CallbackQuery):
     tariff_id = callback.data.removeprefix("admin_tariff_delete_")
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            await tariff_service.delete_tariff(UUID(tariff_id))
+        async with get_session() as session:
+            deleted = await delete_tariff(session, UUID(tariff_id))
+        if not deleted:
+            await callback.answer("❌ Тариф не найден", show_alert=True)
+            return
 
-            await callback.answer("✅ Тариф удалён", show_alert=True)
-            await callback.message.delete()
-            logger.info(f"Tariff {tariff_id} deleted by admin {callback.from_user.id}")
+        await callback.answer("✅ Тариф удалён", show_alert=True)
+        await callback.message.delete()
+        logger.info(f"Tariff {tariff_id} deleted by admin {callback.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in tariff_delete_handler: {e}")
@@ -206,12 +215,16 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
         else:
             value = raw
 
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            update_request = UpdateTariffRequest(**{field: value})
-            tariff = await tariff_service.update_tariff(UUID(tariff_id), update_request)
+        async with get_session() as session:
+            tariff = await update_tariff(session, UUID(tariff_id), **{field: value})
+        if tariff is None:
+            await _edit_prompt(
+                bot, data,
+                "❌ Тариф не найден.",
+                get_admin_menu_keyboard()
+            )
+            await state.clear()
+            return
 
         await state.clear()
 
@@ -250,28 +263,25 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
 @router.callback_query(F.data == "admin_tariffs_back")
 async def tariffs_back_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs = await tariff_service.get_all_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
-            active_count = sum(1 for t in tariffs if t.is_active)
+        active_count = sum(1 for t in tariffs if t.is_active)
 
-            tariffs_list = ""
-            for tariff in sorted(tariffs, key=lambda t: t.sort_order):
-                status_emoji = "✅" if tariff.is_active else "❌"
-                tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
-                tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
+        tariffs_list = ""
+        for tariff in sorted(tariffs, key=lambda t: t.sort_order):
+            status_emoji = "✅" if tariff.is_active else "❌"
+            tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
+            tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
 
-            text = TARIFFS_LIST_TEMPLATE.format(
-                total=len(tariffs),
-                active=active_count,
-                tariffs_list=tariffs_list
-            )
+        text = TARIFFS_LIST_TEMPLATE.format(
+            total=len(tariffs),
+            active=active_count,
+            tariffs_list=tariffs_list
+        )
 
-            await callback.message.edit_text(text, reply_markup=get_tariffs_keyboard(tariffs))
-            await callback.answer()
+        await callback.message.edit_text(text, reply_markup=get_tariffs_keyboard(tariffs))
+        await callback.answer()
 
     except Exception as e:
         logger.error(f"Error in tariffs_back_handler: {e}")
@@ -281,28 +291,25 @@ async def tariffs_back_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "admin_tariffs_refresh")
 async def tariffs_refresh_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-            tariffs = await tariff_service.get_all_tariffs()
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
-            active_count = sum(1 for t in tariffs if t.is_active)
+        active_count = sum(1 for t in tariffs if t.is_active)
 
-            tariffs_list = ""
-            for tariff in sorted(tariffs, key=lambda t: t.sort_order):
-                status_emoji = "✅" if tariff.is_active else "❌"
-                tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
-                tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
+        tariffs_list = ""
+        for tariff in sorted(tariffs, key=lambda t: t.sort_order):
+            status_emoji = "✅" if tariff.is_active else "❌"
+            tariffs_list += f"{status_emoji} <b>{tariff.name}</b> ({tariff.code})\n"
+            tariffs_list += f"   {tariff.days} дней | {tariff.price_rub}₽ | {tariff.price_stars}⭐\n\n"
 
-            text = TARIFFS_LIST_TEMPLATE.format(
-                total=len(tariffs),
-                active=active_count,
-                tariffs_list=tariffs_list
-            )
+        text = TARIFFS_LIST_TEMPLATE.format(
+            total=len(tariffs),
+            active=active_count,
+            tariffs_list=tariffs_list
+        )
 
-            await callback.message.edit_text(text, reply_markup=get_tariffs_keyboard(tariffs))
-            await callback.answer("✅ Обновлено")
+        await callback.message.edit_text(text, reply_markup=get_tariffs_keyboard(tariffs))
+        await callback.answer("✅ Обновлено")
 
     except Exception as e:
         logger.error(f"Error in tariffs_refresh_handler: {e}")
@@ -465,22 +472,26 @@ async def create_tariff_finish(message: Message, state: FSMContext, bot: Bot):
     try:
         sort_order = int(message.text.strip())
 
-        api_client = get_api_client()
-        async with api_client:
-            tariff_repo = TariffRepository(api_client)
-            tariff_service = TariffService(tariff_repo)
-
-            request = CreateTariffRequest(
-                code=data['code'],
-                name=data['name'],
-                days=data['days'],
-                price_rub=data['price_rub'],
-                price_stars=data['price_stars'],
+        async with get_session() as session:
+            existing = await get_tariff_by_code(session, data["code"])
+            if existing is not None:
+                await _edit_prompt(
+                    bot,
+                    data,
+                    f"❌ Тариф с кодом <code>{data['code']}</code> уже существует.",
+                    get_fsm_keyboard(PREFIX, back=True),
+                )
+                return
+            tariff = await create_tariff(
+                session=session,
+                code=data["code"],
+                name=data["name"],
+                days=data["days"],
+                price_rub=data["price_rub"],
+                price_stars=data["price_stars"],
                 is_active=True,
-                sort_order=sort_order
+                sort_order=sort_order,
             )
-
-            tariff = await tariff_service.create_tariff(request)
 
         await _edit_prompt(
             bot, data,

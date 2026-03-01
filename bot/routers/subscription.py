@@ -2,7 +2,11 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, LabeledPrice
 
 from bot.database.management.operations.tariffs import get_all_tariffs
-from bot.database.management.operations.user import update_user_subscription, is_trial_used
+from bot.database.management.operations.user import (
+    get_user_by_user_id,
+    is_trial_used,
+    update_user_subscription,
+)
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
 from bot.database.connection import get_session
@@ -68,6 +72,13 @@ async def back_to_tariffs_handler(callback: CallbackQuery):
 async def trial_handler(callback: CallbackQuery):
     try:
         async with get_session() as session:
+            user = await get_user_by_user_id(session, callback.from_user.id)
+            if user and user.is_admin:
+                await callback.answer(
+                    "ℹ️ Вы администратор. Пробный период не требуется.",
+                    show_alert=True,
+                )
+                return
             if await is_trial_used(session, callback.from_user.id):
                 await callback.answer("❌ Вы уже использовали пробный период", show_alert=True)
                 return
@@ -112,6 +123,14 @@ async def extend_select_payment(callback: CallbackQuery):
 async def _show_payment_methods(callback: CallbackQuery, tariff_code: str, is_extension: bool):
     try:
         async with get_session() as session:
+            user = await get_user_by_user_id(session, callback.from_user.id)
+            if user and user.is_admin:
+                await callback.answer(
+                    "ℹ️ Вы администратор. Подписка не требуется.",
+                    show_alert=True,
+                )
+                return
+
             tariffs = await get_all_tariffs(session)
 
         tariff = next((t for t in tariffs if t.code == tariff_code), None)

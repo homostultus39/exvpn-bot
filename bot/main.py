@@ -13,17 +13,17 @@ from aiohttp import web
 from bot.database.management.default.trial import seed_trial_subscription
 from bot.database.management.operations.user import update_user_subscription
 from bot.management.settings import get_settings
+from bot.scheduler.subscription_expiry import create_subscription_expiry_scheduler
 from bot.routers.start import router as start_router
-# from bot.routers.locations import router as locations_router
+from bot.routers.keys import router as keys_router
 from bot.routers.subscription import router as subscription_router
-# from bot.routers.profile import router as profile_router
+from bot.routers.profile import router as profile_router
 from bot.routers.error_report import router as error_report_router
 from bot.routers.admin.main import router as admin_main_router
 from bot.routers.admin.clusters import router as admin_clusters_router
-# from bot.routers.admin.clients import router as admin_clients_router
-# from bot.routers.admin.client_register import router as admin_client_register_router
-# from bot.routers.admin.statistics import router as admin_statistics_router
-# from bot.routers.admin.tariffs import router as admin_tariffs_router
+from bot.routers.admin.clients import router as admin_clients_router
+from bot.routers.admin.statistics import router as admin_statistics_router
+from bot.routers.admin.tariffs import router as admin_tariffs_router
 from bot.routers.admin.broadcast import router as admin_broadcast_router
 from bot.routers.admin.support import router as admin_support_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
@@ -143,25 +143,29 @@ async def start_polling():
     dp.message.outer_middleware(FsmCancelOnMenuMiddleware())
 
     dp.include_router(start_router)
-    # dp.include_router(locations_router)
+    dp.include_router(keys_router)
     dp.include_router(subscription_router)
-    # dp.include_router(profile_router)
+    dp.include_router(profile_router)
     dp.include_router(error_report_router)
 
     dp.include_router(admin_main_router)
     dp.include_router(admin_clusters_router)
-    # dp.include_router(admin_clients_router)
-    # dp.include_router(admin_client_register_router)
-    # dp.include_router(admin_statistics_router)
-    # dp.include_router(admin_tariffs_router)
+    dp.include_router(admin_clients_router)
+    dp.include_router(admin_statistics_router)
+    dp.include_router(admin_tariffs_router)
     dp.include_router(admin_broadcast_router)
     dp.include_router(admin_support_router)
 
     logger.info("Bot starting...")
     await setup_commands()
     logger.info(settings.api_token)
-    # asyncio.create_task(start_webhook_server())
-    await dp.start_polling(bot)
+    subscription_scheduler = create_subscription_expiry_scheduler()
+    subscription_scheduler.start()
+    asyncio.create_task(start_webhook_server())
+    try:
+        await dp.start_polling(bot)
+    finally:
+        subscription_scheduler.shutdown(wait=False)
 
 
 if __name__ == "__main__":

@@ -1,23 +1,37 @@
+from datetime import datetime
+
+import pytz
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy import func, select
 from uuid import UUID
-from bot.management.timezone import now as get_now
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from bot.management.dependencies import get_api_client
-from bot.entities.client.repository import ClientRepository
-from bot.entities.cluster.repository import ClusterRepository
-from bot.entities.statistics.repository import StatisticsRepository
-from bot.middlewares.admin import AdminMiddleware
+
+from bot.core.xray_panel_client import XrayPanelClient
+from bot.database.connection import get_session
+from bot.database.management.operations.cluster import (
+    get_all_clusters,
+    get_cluster_by_id,
+)
+from bot.database.models import PeerModel, SubscriptionStatus, UserModel
 from bot.keyboards.admin import (
-    get_stats_keyboard, get_stats_clusters_keyboard,
-    get_stats_back_keyboard, get_stats_cluster_back_keyboard
+    get_stats_back_keyboard,
+    get_stats_cluster_back_keyboard,
+    get_stats_clusters_keyboard,
+    get_stats_keyboard,
 )
 from bot.messages.admin import (
-    CLIENTS_STATS_TEMPLATE, GLOBAL_STATS_TEMPLATE, CLUSTER_STATS_TEMPLATE
+    CLIENTS_STATS_TEMPLATE,
+    CLUSTER_STATS_TEMPLATE,
+    GLOBAL_STATS_TEMPLATE,
 )
 from bot.management.logger import configure_logger
+from bot.management.settings import get_settings
+from bot.middlewares.admin import AdminMiddleware
 
 router = Router()
 logger = configure_logger("ADMIN_STATISTICS", "red")
+settings = get_settings()
+tz = pytz.timezone(settings.timezone)
 router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
 
@@ -46,25 +60,41 @@ async def statistics_handler(message: Message):
 @router.callback_query(F.data == "admin_stats_global")
 async def stats_global_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            stats_repo = StatisticsRepository(api_client)
-            stats = await stats_repo.get_global()
+        async with get_session() as session:
+            clusters = await get_all_clusters(session)
+            users = await session.execute(select(UserModel))
+            users = list(users.scalars().all())
+            peers_count_result = await session.execute(select(func.count(PeerModel.id)))
+            peers_total = int(peers_count_result.scalar() or 0)
+
+            clients_active = len(
+                [
+                    user for user in users
+                    if user.subscription_status in (
+                        SubscriptionStatus.ACTIVE.value,
+                        SubscriptionStatus.UNLIMITED.value,
+                    )
+                ]
+            )
+            clients_trial = len(
+                [user for user in users if user.subscription_status == SubscriptionStatus.TRIAL.value]
+            )
+            clients_expired = len(
+                [user for user in users if user.subscription_status == SubscriptionStatus.EXPIRED.value]
+            )
 
         text = GLOBAL_STATS_TEMPLATE.format(
-            clusters_total=stats.clusters.total,
-            clusters_active=stats.clusters.active,
-            clusters_inactive=stats.clusters.inactive,
-            clients_total=stats.clients.total,
-            clients_active=stats.clients.by_status.active,
-            clients_trial=stats.clients.by_status.trial,
-            clients_expired=stats.clients.by_status.expired,
-            peers_total=stats.peers.total,
-            peers_online=stats.peers.online,
-            peers_amnezia_vpn=stats.peers.by_app_type.amnezia_vpn,
-            peers_amnezia_wg=stats.peers.by_app_type.amnezia_wg,
-            rx=_fmt_bytes(stats.traffic.total_rx_bytes),
-            tx=_fmt_bytes(stats.traffic.total_tx_bytes),
+            clusters_total=len(clusters),
+            clusters_active=len(clusters),
+            clusters_inactive=0,
+            clients_total=len(users),
+            clients_active=clients_active,
+            clients_trial=clients_trial,
+            clients_expired=clients_expired,
+            peers_total=peers_total,
+            peers_online=0,
+            rx=_fmt_bytes(0),
+            tx=_fmt_bytes(0),
         )
         await callback.message.edit_text(text, reply_markup=get_stats_back_keyboard())
         await callback.answer()
@@ -77,10 +107,8 @@ async def stats_global_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "admin_stats_cluster_list")
 async def stats_cluster_list_handler(callback: CallbackQuery):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            cluster_repo = ClusterRepository(api_client)
-            clusters = await cluster_repo.list()
+        async with get_session() as session:
+            clusters = await get_all_clusters(session)
 
         await callback.message.edit_text(
             "🌐 <b>Статистика по кластеру</b>\n\nВыберите кластер:",
@@ -95,26 +123,31 @@ async def stats_cluster_list_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin_stats_cl:"))
 async def stats_cluster_handler(callback: CallbackQuery):
-    cluster_id_str = callback.data.removeprefix("admin_stats_cl:")
+    cluster_id_raw = callback.data.removeprefix("admin_stats_cl:")
     try:
-        api_client = get_api_client()
-        async with api_client:
-            stats_repo = StatisticsRepository(api_client)
-            stats = await stats_repo.get_cluster(UUID(cluster_id_str))
+        cluster_id = UUID(cluster_id_raw)
+        async with get_session() as session:
+            cluster = await get_cluster_by_id(session, cluster_id)
+            if cluster is None:
+                await callback.answer("❌ Кластер не найден", show_alert=True)
+                return
+            clients_total_result = await session.execute(
+                select(func.count(PeerModel.id)).where(PeerModel.cluster_id == cluster.id)
+            )
+            clients_total = int(clients_total_result.scalar() or 0)
 
-        status = "✅ Активен" if stats.cluster.is_active else "❌ Неактивен"
+        panel_client = XrayPanelClient.from_cluster(cluster)
+        stats = await panel_client.get_cluster_stats()
+
         text = CLUSTER_STATS_TEMPLATE.format(
-            cluster_name=stats.cluster.name,
-            status=status,
-            container_status=stats.cluster.container_status or "—",
-            protocol=stats.cluster.protocol or "—",
-            clients_total=stats.clients.total,
-            peers_total=stats.peers.total,
-            peers_online=stats.peers.online,
-            peers_amnezia_vpn=stats.peers.by_app_type.amnezia_vpn,
-            peers_amnezia_wg=stats.peers.by_app_type.amnezia_wg,
-            rx=_fmt_bytes(stats.traffic.total_rx_bytes),
-            tx=_fmt_bytes(stats.traffic.total_tx_bytes),
+            cluster_name=cluster.public_name,
+            status="✅ Доступен",
+            inbounds_total=stats["inbounds_total"],
+            clients_total=clients_total,
+            peers_total=clients_total,
+            peers_online=stats["clients_online"],
+            rx=_fmt_bytes(stats["rx_bytes"]),
+            tx=_fmt_bytes(stats["tx_bytes"]),
         )
         await callback.message.edit_text(text, reply_markup=get_stats_cluster_back_keyboard())
         await callback.answer()
@@ -136,21 +169,25 @@ async def stats_back_handler(callback: CallbackQuery):
 @router.message(F.text == "👥 Клиенты")
 async def clients_stats_handler(message: Message):
     try:
-        api_client = get_api_client()
-        async with api_client:
-            client_repo = ClientRepository(api_client)
-            clients = await client_repo.list()
-
-            active_count = sum(1 for c in clients if c.expires_at is None or c.expires_at > get_now())
-            with_keys_count = sum(1 for c in clients if c.peers_count > 0)
-
-            text = CLIENTS_STATS_TEMPLATE.format(
-                total=len(clients),
-                active=active_count,
-                with_keys=with_keys_count
+        async with get_session() as session:
+            users_result = await session.execute(select(UserModel))
+            users = list(users_result.scalars().all())
+            active_count = sum(
+                1 for user in users if user.expires_at is None or user.expires_at > datetime.now(tz)
             )
 
-            await message.answer(text)
+            with_keys_result = await session.execute(
+                select(func.count(func.distinct(PeerModel.client_id)))
+            )
+            with_keys_count = int(with_keys_result.scalar() or 0)
+
+        text = CLIENTS_STATS_TEMPLATE.format(
+            total=len(users),
+            active=active_count,
+            with_keys=with_keys_count
+        )
+
+        await message.answer(text)
 
     except Exception as e:
         logger.error(f"Error in clients_stats_handler: {e}")

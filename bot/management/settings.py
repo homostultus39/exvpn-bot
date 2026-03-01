@@ -1,13 +1,14 @@
 from functools import lru_cache
 from pydantic import field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from Crypto.Random import get_random_bytes
+
 
 class Settings(BaseSettings):
     api_token: str
     admin_ids: str
     timezone: str = "UTC"
     trial_period_days: int = 3
+    password_encryption_key: str = ""
 
     privacy_policy_url: str
     user_agreement_url: str

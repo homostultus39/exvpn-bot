@@ -1,28 +1,29 @@
 from datetime import datetime
-from bot.management.timezone import get_timezone, now as get_now
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, BufferedInputFile
-from bot.management.dependencies import get_api_client
-from bot.entities.client.repository import ClientRepository
-from bot.entities.client.service import ClientService
-from bot.entities.cluster.repository import ClusterRepository
-from bot.entities.cluster.service import ClusterService
-from bot.entities.peer.repository import PeerRepository
-from bot.entities.peer.service import PeerService
-from bot.keyboards.user import get_profile_keyboard, get_main_menu_keyboard, get_back_to_menu_keyboard
+
+import pytz
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, Message
+
+from bot.database.connection import get_session
+from bot.database.management.operations.cluster import get_cluster_by_id
+from bot.database.management.operations.peer import get_peers_by_user
+from bot.database.management.operations.user import get_user_by_user_id
+from bot.keyboards.user import get_back_to_menu_keyboard, get_main_menu_keyboard, get_profile_keyboard
+from bot.management.settings import get_settings
 from bot.messages.user import (
+    CLIENT_INFO,
+    MAIN_MENU_MESSAGE,
     PROFILE_MESSAGE_TEMPLATE,
     SUBSCRIPTION_ACTIVE_TEMPLATE,
     SUBSCRIPTION_EXPIRED,
-    MAIN_MENU_MESSAGE,
-    CLIENT_INFO
 )
-from bot.management.config_filename import generate_config_filename
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
 
 router = Router()
 logger = configure_logger("PROFILE_ROUTER", "magenta")
+settings = get_settings()
+tz = pytz.timezone(settings.timezone)
 
 
 @router.message(F.text == "👤 Профиль")
@@ -34,29 +35,23 @@ async def profile_handler(message: Message):
     await delete_last(message.bot, message.chat.id)
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            client_repo = ClientRepository(api_client)
-            client_service = ClientService(client_repo)
-
-            peer_repo = PeerRepository(api_client)
-            peer_service = PeerService(peer_repo)
-
-            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
-            client = await client_service.get_client(client_id)
-
-            expires_at = client.expires_at
+        async with get_session() as session:
+            user = await get_user_by_user_id(session, telegram_id)
+            if user is None:
+                await message.answer("❌ Вы не зарегистрированы. Используйте /start")
+                return
+            expires_at = user.expires_at
             if expires_at is None:
                 subscription_status = "♾️ Без ограничений (администратор)"
-            elif expires_at > get_now():
-                local_expires_at = expires_at.astimezone(get_timezone())
+            elif expires_at > datetime.now(tz):
+                local_expires_at = expires_at.astimezone(tz)
                 subscription_status = SUBSCRIPTION_ACTIVE_TEMPLATE.format(
                     expires_at=local_expires_at.strftime("%d.%m.%Y %H:%M")
                 )
             else:
                 subscription_status = SUBSCRIPTION_EXPIRED
 
-            peers = await peer_service.get_client_peers(client_id)
+            peers = await get_peers_by_user(session, user.id)
 
             profile_text = PROFILE_MESSAGE_TEMPLATE.format(
                 telegram_id=telegram_id,
@@ -84,19 +79,13 @@ async def my_keys_handler(callback: CallbackQuery):
     clear(callback.message.chat.id)
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            client_repo = ClientRepository(api_client)
-            client_service = ClientService(client_repo)
-
-            cluster_repo = ClusterRepository(api_client)
-            cluster_service = ClusterService(cluster_repo)
-
-            peer_repo = PeerRepository(api_client)
-            peer_service = PeerService(peer_repo)
-
-            client_id = await client_service.get_client_id_by_telegram_id(telegram_id)
-            peers = await peer_service.get_client_peers(client_id)
+        async with get_session() as session:
+            user = await get_user_by_user_id(session, telegram_id)
+            if user is None:
+                await callback.message.answer("❌ Вы не зарегистрированы. Используйте /start")
+                await callback.answer()
+                return
+            peers = await get_peers_by_user(session, user.id)
 
             if not peers:
                 await callback.message.answer(
@@ -111,23 +100,11 @@ async def my_keys_handler(callback: CallbackQuery):
             await callback.answer()
 
             for peer in peers:
-                try:
-                    cluster = await cluster_service.get_cluster(peer.cluster_id)
-                    cluster_name = cluster.name
-                except Exception:
-                    cluster_name = "Неизвестно"
-
-                app_type_label = "AmneziaVPN" if peer.app_type == "amnezia_vpn" else "AmneziaWG"
-                caption = f"🌍 {cluster_name}\n📱 {app_type_label}"
-
-                fresh_peer = await peer_repo.get(peer.id)
-                if fresh_peer.config:
-                    config_bytes = fresh_peer.config.encode("utf-8")
-                    filename = generate_config_filename(cluster_name)
-                    config_file = BufferedInputFile(config_bytes, filename=filename)
-                    await callback.message.answer_document(document=config_file, caption=caption)
-                else:
-                    await callback.message.answer(f"⚠️ Конфиг для {cluster_name} ({app_type_label}) пока не готов")
+                cluster = await get_cluster_by_id(session, peer.cluster_id)
+                cluster_name = cluster.public_name if cluster else "Неизвестно"
+                await callback.message.answer(
+                    f"🌍 {cluster_name}\n🔑 <code>{peer.url}</code>"
+                )
 
             sent_info = await callback.message.answer(CLIENT_INFO)
             sent_menu = await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
