@@ -85,7 +85,7 @@ async def register_user_by_admin(
         selected_user.is_admin = is_admin
         selected_user.expires_at = normalized_expires_at
         selected_user.subscription_status = subscription_status
-        selected_user.aggreed_to_terms = True
+        selected_user.aggreed_to_terms = False
         session.add(selected_user)
         await session.commit()
         await session.refresh(selected_user)
@@ -96,7 +96,7 @@ async def register_user_by_admin(
         is_admin=is_admin,
         expires_at=normalized_expires_at,
         subscription_status=subscription_status,
-        aggreed_to_terms=True,
+        aggreed_to_terms=False,
     )
     session.add(user)
     await session.commit()
