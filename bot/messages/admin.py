@@ -6,7 +6,6 @@ ADMIN_MENU = """🔐 <b>Админ-панель</b>
 CLUSTERS_LIST_TEMPLATE = """🌐 <b>Кластеры</b>
 
 Всего: {total}
-Активные: {active}
 
 {clusters_list}"""
 
@@ -15,10 +14,7 @@ CLUSTER_INFO_TEMPLATE = """🌐 <b>Кластер: {name}</b>
 
 🆔 ID: <code>{id}</code>
 🌍 Endpoint: {endpoint}
-📊 Статус: {status}
-🔌 Онлайн пиров: {online_peers}/{total_peers}
-🐳 Контейнер: {container_status}
-🔄 Последний handshake: {last_handshake}"""
+🔌 Количество пиров: {total_peers}"""
 
 
 CLIENTS_STATS_TEMPLATE = """👥 <b>Клиенты</b>

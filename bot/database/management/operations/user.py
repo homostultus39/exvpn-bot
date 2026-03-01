@@ -79,3 +79,9 @@ async def update_user_subscription(session: AsyncSession, user_id: int, tariff_c
 async def is_trial_used(session: AsyncSession, user_id: int) -> bool:
     selected_user = await get_user_by_user_id(session, user_id)
     return selected_user.trial_used
+
+async def get_all_user_ids(session: AsyncSession) -> list:
+    result = await session.execute(
+        select(UserModel.user_id)
+    )
+    return list(result.scalars().all())

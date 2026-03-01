@@ -1,8 +1,8 @@
 import enum
 import uuid
 from datetime import datetime
-from sqlalchemy.orm import mapped_column, Mapped
-from sqlalchemy import func, BigInteger, Text, DateTime, UUID, Boolean, Integer, String
+from sqlalchemy.orm import mapped_column, Mapped, relationship
+from sqlalchemy import func, BigInteger, Text, DateTime, UUID, Boolean, Integer, String, ForeignKey, LargeBinary
 
 from bot.database.base import Base
 
@@ -35,7 +35,6 @@ class SubscriptionStatus(enum.Enum):
     EXPIRED = "expired"
     UNLIMITED = "unlimited"
 
-
 class UserModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
@@ -46,15 +45,31 @@ class UserModel(Base, UUIDMixin, TimestampMixin):
     trial_used: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    peers: Mapped["PeerModel"] = relationship("PeerModel", back_populates="client", cascade="all, delete-orphan", uselist=True)
+
+
+class PeerModel(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "peers"
+
+    client_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    cluster_id: Mapped[int] = mapped_column(ForeignKey("clusters.id"), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+    client: Mapped["UserModel"] = relationship("UserModel", back_populates="peers")
+    cluster: Mapped["ClusterModel"] = relationship("ClusterModel", back_populates="peers")
+
 
 class ClusterModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "clusters"
+
     endpoint: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     public_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     lowercase_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    iv: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    encrypted_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    peers: Mapped["PeerModel"] = relationship("PeerModel", back_populates="cluster", cascade="all, delete-orphan", uselist=True)
 
 
 class TariffModel(Base, UUIDMixin, TimestampMixin):

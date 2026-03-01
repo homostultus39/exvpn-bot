@@ -18,15 +18,14 @@ from bot.routers.start import router as start_router
 from bot.routers.subscription import router as subscription_router
 # from bot.routers.profile import router as profile_router
 from bot.routers.error_report import router as error_report_router
-# from bot.routers.admin.main import router as admin_main_router
-# from bot.routers.admin.clusters import router as admin_clusters_router
-# from bot.routers.admin.cluster_create import router as admin_cluster_create_router
+from bot.routers.admin.main import router as admin_main_router
+from bot.routers.admin.clusters import router as admin_clusters_router
 # from bot.routers.admin.clients import router as admin_clients_router
 # from bot.routers.admin.client_register import router as admin_client_register_router
 # from bot.routers.admin.statistics import router as admin_statistics_router
 # from bot.routers.admin.tariffs import router as admin_tariffs_router
-# from bot.routers.admin.broadcast import router as admin_broadcast_router
-# from bot.routers.admin.support import router as admin_support_router
+from bot.routers.admin.broadcast import router as admin_broadcast_router
+from bot.routers.admin.support import router as admin_support_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
 from bot.database.management.default.admins import seed_admins
 from bot.database.management.operations.pending_payment import (
@@ -149,15 +148,14 @@ async def start_polling():
     # dp.include_router(profile_router)
     dp.include_router(error_report_router)
 
-    # dp.include_router(admin_main_router)
-    # dp.include_router(admin_clusters_router)
-    # dp.include_router(admin_cluster_create_router)
+    dp.include_router(admin_main_router)
+    dp.include_router(admin_clusters_router)
     # dp.include_router(admin_clients_router)
     # dp.include_router(admin_client_register_router)
     # dp.include_router(admin_statistics_router)
     # dp.include_router(admin_tariffs_router)
-    # dp.include_router(admin_broadcast_router)
-    # dp.include_router(admin_support_router)
+    dp.include_router(admin_broadcast_router)
+    dp.include_router(admin_support_router)
 
     logger.info("Bot starting...")
     await setup_commands()

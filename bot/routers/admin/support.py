@@ -5,9 +5,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 
-from bot.database.connection import sessionmaker
+from bot.database.connection import get_session
 from bot.database.management.operations.report import get_oldest_unanswered, set_reply
-from bot.management.fsm_utils import cancel_active_fsm
+from bot.middlewares.fsm_cancel import cancel_active_fsm
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import get_admin_menu_keyboard, get_support_ticket_keyboard, get_support_cancel_keyboard
 from bot.management.logger import configure_logger
@@ -28,7 +28,7 @@ async def _show_next_ticket(
     state: FSMContext,
     skip_ids: list[uuid.UUID] | None = None
 ) -> None:
-    async with sessionmaker() as session:
+    async with get_session() as session:
         ticket = await get_oldest_unanswered(session, skip_ids=skip_ids)
 
     if ticket is None:
@@ -117,7 +117,7 @@ async def support_reply_send(message: Message, state: FSMContext, bot: Bot):
         pass
 
     try:
-        async with sessionmaker() as session:
+        async with get_session() as session:
             await set_reply(session, ticket_id=ticket_id, reply=reply_text)
 
         try:

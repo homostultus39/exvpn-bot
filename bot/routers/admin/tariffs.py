@@ -4,11 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
-from bot.management.dependencies import get_api_client
-from bot.management.fsm_utils import cancel_active_fsm
-from bot.entities.tariff.repository import TariffRepository
-from bot.entities.tariff.service import TariffService
-from bot.entities.tariff.models import CreateTariffRequest, UpdateTariffRequest
+from bot.middlewares.fsm_cancel import cancel_active_fsm
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import (
     get_tariffs_keyboard, get_tariff_actions_keyboard,

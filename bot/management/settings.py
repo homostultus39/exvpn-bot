@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pydantic import field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from Crypto.Random import get_random_bytes
 
 class Settings(BaseSettings):
     api_token: str
@@ -42,7 +42,6 @@ class Settings(BaseSettings):
     @property
     def sync_postgres_url(self) -> str:
         return f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-
 
 @lru_cache()
 def get_settings() -> Settings:

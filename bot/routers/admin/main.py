@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from bot.middlewares.admin import AdminMiddleware
-from bot.management.fsm_utils import cancel_active_fsm
+from bot.middlewares.fsm_cancel import cancel_active_fsm
 from bot.keyboards.admin import get_admin_menu_keyboard
 from bot.keyboards.user import get_main_menu_keyboard
 from bot.messages.admin import ADMIN_MENU

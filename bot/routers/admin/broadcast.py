@@ -3,9 +3,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
-from bot.management.dependencies import get_api_client
-from bot.management.fsm_utils import cancel_active_fsm
-from bot.entities.client.repository import ClientRepository
+from bot.database.connection import get_session
+from bot.database.management.operations.user import get_all_user_ids
+from bot.middlewares.fsm_cancel import cancel_active_fsm
 from bot.middlewares.admin import AdminMiddleware
 from bot.keyboards.admin import (
     get_admin_menu_keyboard,
@@ -75,16 +75,13 @@ async def broadcast_confirm(callback: CallbackQuery, state: FSMContext, bot: Bot
     await callback.answer()
 
     try:
-        api_client = get_api_client()
-        async with api_client:
-            client_repo = ClientRepository(api_client)
-            clients = await client_repo.list()
+        async with get_session() as session:
+            users = await get_all_user_ids(session)
 
         sent = 0
         failed = 0
-        for client in clients:
+        for user_id in users:
             try:
-                user_id = int(client.username)
                 await bot.send_message(user_id, text)
                 sent += 1
             except Exception:
