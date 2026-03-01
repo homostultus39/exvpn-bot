@@ -54,8 +54,13 @@ async def get_or_create_peer_for_cluster(
 ) -> PeerModel:
     existing_peer = await get_peer_by_user_and_cluster(session, user_db_id, cluster.id)
     if existing_peer:
-        existing_client = await xray_client.get_client_by_email(user_id=user_id)
-        if existing_client is not None:
+        current_url = await xray_client.get_connection_url(user_id=user_id)
+        if current_url is not None:
+            if existing_peer.url != current_url:
+                existing_peer.url = current_url
+                session.add(existing_peer)
+                await session.commit()
+                await session.refresh(existing_peer)
             return existing_peer
         await session.delete(existing_peer)
         await session.commit()
