@@ -246,7 +246,7 @@ async def pay_rukassa_handler(callback: CallbackQuery):
             return
 
         result = await rukassa_client.create_payment(
-            user_id=callback.from_user.id,
+            telegram_id=callback.from_user.id,
             amount=tariff.price_rub,
             tariff_code=tariff_code,
             is_extension=is_extension,
@@ -336,7 +336,8 @@ async def pay_yookassa_handler(callback: CallbackQuery):
     is_extension = prefix == "extend"
 
     try:
-        tariffs = await get_all_tariffs(get_session())
+        async with get_session() as session:
+            tariffs = await get_all_tariffs(session)
 
         tariff = next((t for t in tariffs if t.code == tariff_code), None)
         if not tariff:
@@ -344,7 +345,7 @@ async def pay_yookassa_handler(callback: CallbackQuery):
             return
 
         result = await yookassa_client.create_payment(
-            user_id=callback.from_user.id,
+            telegram_id=callback.from_user.id,
             amount=tariff.price_rub,
             tariff_code=tariff_code,
             tariff_name=tariff.name,
