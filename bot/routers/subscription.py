@@ -219,7 +219,8 @@ async def successful_payment_handler(message: Message):
         await message.answer(
             f"✅ <b>Оплата прошла успешно!</b>\n\n"
             f"Подписка {verb}.\n"
-            f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения."
+            f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
+            reply_markup=get_main_menu_keyboard(),
         )
         logger.info(f"Stars subscription activated: user={user_id} tariff={tariff_code}")
 
