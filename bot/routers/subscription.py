@@ -22,6 +22,7 @@ from bot.keyboards.user import (
     get_subscription_keyboard,
     get_payment_method_keyboard,
     get_check_payment_keyboard,
+    get_back_to_menu_keyboard,
 )
 from bot.messages.user import CLIENT_INFO, MAIN_MENU_MESSAGE, SUBSCRIPTION_REQUIRED
 from bot.middlewares.terms import AcceptedTermsMiddleware
@@ -314,7 +315,8 @@ async def check_rukassa_handler(callback: CallbackQuery):
             await callback.message.edit_text(
                 f"✅ <b>Оплата подтверждена!</b>\n\n"
                 f"Подписка {verb}.\n"
-                f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения."
+                f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
+                reply_markup=get_back_to_menu_keyboard(),
             )
             logger.info(f"Rukassa payment confirmed: order={order_id}")
 
@@ -414,7 +416,8 @@ async def check_yookassa_handler(callback: CallbackQuery):
             await callback.message.edit_text(
                 f"✅ <b>Оплата подтверждена!</b>\n\n"
                 f"Подписка {verb}.\n"
-                f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения."
+                f"Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
+                reply_markup=get_back_to_menu_keyboard(),
             )
             logger.info(f"YooMoney payment confirmed: payment_id={payment_id}")
 
