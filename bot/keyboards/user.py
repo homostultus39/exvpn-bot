@@ -42,6 +42,14 @@ def get_locations_keyboard(clusters: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_key_mode_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="VPN (+WARP)", callback_data=f"key_mode:standard:{cluster_id}")],
+        [InlineKeyboardButton(text="Белые списки", callback_data=f"key_mode:whitelist:{cluster_id}")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_locations")],
+    ])
+
+
 async def get_subscription_keyboard(is_extension: bool = False) -> InlineKeyboardMarkup:
     prefix = "extend_" if is_extension else "buy_"
     buttons = []
