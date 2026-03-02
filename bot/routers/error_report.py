@@ -6,9 +6,10 @@ from aiogram.filters import StateFilter
 
 from bot.database.connection import get_session
 from bot.database.management.operations.report import create_ticket
-from bot.keyboards.user import get_error_report_cancel_keyboard
+from bot.keyboards.user import get_error_report_cancel_keyboard, get_main_menu_keyboard
 from bot.management.logger import configure_logger
 from bot.middlewares.terms import AcceptedTermsMiddleware
+from bot.messages.user import MAIN_MENU_MESSAGE
 
 router = Router()
 router.message.middleware(AcceptedTermsMiddleware())
@@ -43,6 +44,7 @@ async def error_report_start(message: Message, state: FSMContext, bot: Bot):
 async def error_report_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
+    await callback.message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
     await callback.answer()
 
 
@@ -80,4 +82,5 @@ async def error_report_message(message: Message, state: FSMContext, bot: Bot):
         except Exception:
             pass
 
+    await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
     await state.clear()

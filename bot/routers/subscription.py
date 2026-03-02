@@ -29,12 +29,14 @@ from bot.keyboards.user import (
 )
 from bot.messages.user import CLIENT_INFO, MAIN_MENU_MESSAGE, SUBSCRIPTION_REQUIRED
 from bot.middlewares.terms import AcceptedTermsMiddleware
+from bot.management.settings import get_settings
 import bot.payments.yookassa as yookassa_client
 
 router = Router()
 router.message.middleware(AcceptedTermsMiddleware())
 router.callback_query.middleware(AcceptedTermsMiddleware())
 logger = configure_logger("SUBSCRIPTION_ROUTER", "yellow")
+settings = get_settings()
 
 
 class PromoCodeState(StatesGroup):
@@ -170,7 +172,7 @@ async def trial_handler(callback: CallbackQuery):
         await _activate_subscription(callback.from_user.id, "trial")
         await callback.message.edit_text(
             "✅ <b>Пробный период активирован!</b>\n\n"
-            "Подписка активна на 3 дня.\n"
+            f"К сроку подписки добавлено {settings.trial_period_days} дней.\n"
             "Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
             reply_markup=get_main_menu_keyboard()
         )

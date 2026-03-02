@@ -97,7 +97,29 @@ async def add_days_to_subscription(session: AsyncSession, user_id: int, days: in
     selected_user.subscription_status = SubscriptionStatus.ACTIVE.value
     session.add(selected_user)
     await session.commit()
+    await sync_user_expiry_to_panels(session, user_id, selected_user.expires_at)
     return True
+
+
+async def sync_user_expiry_to_panels(
+    session: AsyncSession,
+    user_id: int,
+    expires_at: datetime | None,
+) -> None:
+    selected_user = await get_user_by_user_id(session, user_id)
+    if selected_user is None:
+        return
+
+    peers = await get_peers_by_user(session, selected_user.id)
+    for peer in peers:
+        cluster = await get_cluster_by_id(session, peer.cluster_id)
+        if cluster is None:
+            continue
+        try:
+            xray_client = XrayPanelClient.from_cluster(cluster)
+            await xray_client.update_client(user_id, expires_at)
+        except Exception:
+            continue
 
 
 async def get_referral_stats(session: AsyncSession, user_id: int) -> tuple[int, int, int]:
@@ -113,7 +135,7 @@ async def get_referral_stats(session: AsyncSession, user_id: int) -> tuple[int, 
         if user.subscription_status in (SubscriptionStatus.ACTIVE.value, SubscriptionStatus.EXPIRED.value)
         and user.expires_at is not None
     )
-    bonus_days = paid_count * 7
+    bonus_days = paid_count * get_settings().referral_bonus_days
     return invited_count, paid_count, bonus_days
 
 
@@ -182,22 +204,33 @@ async def update_user_subscription(session: AsyncSession, user_id: int, tariff_c
     )
 
     tariff = await get_tariff_by_code(session, tariff_code)
+    settings = get_settings()
+    tz = pytz.timezone(settings.timezone)
+    now = datetime.now(tz)
 
-    selected_user.subscription_status = SubscriptionStatus.ACTIVE.value if tariff_code != "trial" else SubscriptionStatus.TRIAL.value
     if tariff_code == "trial":
         selected_user.trial_used = True
+        selected_user.subscription_status = (
+            SubscriptionStatus.ACTIVE.value
+            if selected_user.expires_at and selected_user.expires_at > now
+            else SubscriptionStatus.TRIAL.value
+        )
+    else:
+        selected_user.subscription_status = SubscriptionStatus.ACTIVE.value
 
-    tz = pytz.timezone(get_settings().timezone)
-    if selected_user.expires_at and selected_user.expires_at > datetime.now(tz):
+    if selected_user.expires_at and selected_user.expires_at > now:
         selected_user.expires_at = selected_user.expires_at + timedelta(days=tariff.days)
     else:
-        selected_user.expires_at = datetime.now(tz) + timedelta(days=tariff.days)
+        selected_user.expires_at = now + timedelta(days=tariff.days)
 
     session.add(selected_user)
     await session.commit()
+    await sync_user_expiry_to_panels(session, user_id, selected_user.expires_at)
 
     if should_grant_referral_bonus:
-        await add_days_to_subscription(session, selected_user.referrer_id, 7)
+        referral_bonus_days = settings.referral_bonus_days
+        await add_days_to_subscription(session, selected_user.referrer_id, referral_bonus_days)
+        await add_days_to_subscription(session, selected_user.user_id, referral_bonus_days)
 
 async def is_trial_used(session: AsyncSession, user_id: int) -> bool:
     selected_user = await get_user_by_user_id(session, user_id)

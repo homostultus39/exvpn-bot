@@ -136,6 +136,7 @@ async def referral_handler(callback: CallbackQuery):
                 invited_count=invited_count,
                 paid_count=paid_count,
                 bonus_days=bonus_days,
+                referral_bonus_days=settings.referral_bonus_days,
             ),
             reply_markup=get_back_to_menu_keyboard(),
         )

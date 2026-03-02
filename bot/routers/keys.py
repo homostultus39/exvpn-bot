@@ -50,7 +50,8 @@ async def _issue_standard_key(callback: CallbackQuery, cluster_id: UUID) -> None
         if not await is_subscription_active(session, telegram_id):
             await callback.message.edit_text(
                 "⚠️ <b>Подписка истекла</b>\n\n"
-                "Для получения ключей продлите подписку в разделе 💎 Подписка."
+                "Для получения ключей продлите подписку в разделе 💎 Подписка.",
+                reply_markup=get_back_to_menu_keyboard(),
             )
             await callback.answer()
             return
@@ -160,7 +161,8 @@ async def location_selected_handler(callback: CallbackQuery):
             if not await is_subscription_active(session, telegram_id):
                 await callback.message.edit_text(
                     "⚠️ <b>Подписка истекла</b>\n\n"
-                    "Для получения ключей продлите подписку в разделе 💎 Подписка."
+                    "Для получения ключей продлите подписку в разделе 💎 Подписка.",
+                    reply_markup=get_back_to_menu_keyboard(),
                 )
                 await callback.answer()
                 return

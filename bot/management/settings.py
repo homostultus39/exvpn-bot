@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     admin_ids: str
     timezone: str = "UTC"
     trial_period_days: int = 3
+    referral_bonus_days: int = 7
     password_encryption_key: str = ""
 
     privacy_policy_url: str

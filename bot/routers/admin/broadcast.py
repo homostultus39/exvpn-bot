@@ -92,6 +92,7 @@ async def broadcast_confirm(callback: CallbackQuery, state: FSMContext, bot: Bot
             f"📨 Отправлено: {sent}\n"
             f"❌ Не доставлено: {failed}"
         )
+        await callback.message.answer("🔐 Вы в главном меню.", reply_markup=get_admin_menu_keyboard())
         logger.info(f"Broadcast by admin {callback.from_user.id}: sent={sent}, failed={failed}")
 
     except Exception as e:
@@ -99,3 +100,4 @@ async def broadcast_confirm(callback: CallbackQuery, state: FSMContext, bot: Bot
         await callback.message.edit_text(
             f"❌ Ошибка при рассылке:\n\n<code>{str(e)}</code>"
         )
+        await callback.message.answer("🔐 Вы в главном меню.", reply_markup=get_admin_menu_keyboard())

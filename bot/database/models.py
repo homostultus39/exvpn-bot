@@ -39,7 +39,7 @@ class UserModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
     user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
-    referrer_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    referrer_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None, index=True)
     aggreed_to_terms: Mapped[bool] = mapped_column(nullable=True, default=False)
     subscription_status: Mapped[SubscriptionStatus] = mapped_column(String(50), default=SubscriptionStatus.EXPIRED.value, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
