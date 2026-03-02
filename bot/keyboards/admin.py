@@ -4,7 +4,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeybo
 def get_admin_menu_keyboard() -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text="🌐 Кластеры"), KeyboardButton(text="👥 Клиенты")],
-        [KeyboardButton(text="💳 Тарифы"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="💳 Тарифы"), KeyboardButton(text="🎟 Промокоды")],
+        [KeyboardButton(text="📊 Статистика")],
         [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="📋 Обращения")],
         [KeyboardButton(text="◀️ Выход из админ-панели")]
     ]

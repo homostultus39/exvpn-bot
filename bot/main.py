@@ -22,6 +22,7 @@ from bot.routers.admin.statistics import router as admin_statistics_router
 from bot.routers.admin.tariffs import router as admin_tariffs_router
 from bot.routers.admin.broadcast import router as admin_broadcast_router
 from bot.routers.admin.support import router as admin_support_router
+from bot.routers.admin.promocodes import router as admin_promocodes_router
 from bot.middlewares.fsm_cancel import FsmCancelOnMenuMiddleware
 from bot.database.management.default.admins import seed_admins
 from bot.management.logger import configure_logger
@@ -79,12 +80,12 @@ async def start_polling():
     dp.include_router(admin_clients_router)
     dp.include_router(admin_statistics_router)
     dp.include_router(admin_tariffs_router)
+    dp.include_router(admin_promocodes_router)
     dp.include_router(admin_broadcast_router)
     dp.include_router(admin_support_router)
 
     logger.info("Bot starting...")
     await setup_commands()
-    logger.info(settings.api_token)
     subscription_scheduler = create_subscription_expiry_scheduler()
     subscription_scheduler.start()
     try:

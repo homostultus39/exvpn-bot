@@ -8,6 +8,7 @@ from bot.database.connection import get_session
 from bot.database.management.operations.cluster import get_cluster_by_id
 from bot.database.management.operations.peer import get_peers_by_user
 from bot.database.management.operations.user import get_user_by_user_id
+from bot.database.management.operations.user import get_referral_stats
 from bot.keyboards.user import get_back_to_menu_keyboard, get_main_menu_keyboard, get_profile_keyboard
 from bot.management.settings import get_settings
 from bot.messages.user import (
@@ -16,6 +17,7 @@ from bot.messages.user import (
     PROFILE_MESSAGE_TEMPLATE,
     SUBSCRIPTION_ACTIVE_TEMPLATE,
     SUBSCRIPTION_EXPIRED,
+    REFERRAL_TEMPLATE,
 )
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last, clear
@@ -113,3 +115,31 @@ async def my_keys_handler(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in my_keys_handler: {e}")
         await callback.message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
+
+@router.callback_query(F.data == "referral")
+async def referral_handler(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    try:
+        async with get_session() as session:
+            user = await get_user_by_user_id(session, telegram_id)
+            if user is None:
+                await callback.answer("❌ Вы не зарегистрированы. Используйте /start", show_alert=True)
+                return
+            invited_count, paid_count, bonus_days = await get_referral_stats(session, telegram_id)
+
+        bot_username = (await callback.bot.get_me()).username
+        ref_link = f"https://t.me/{bot_username}?start=ref_{telegram_id}"
+        await callback.message.edit_text(
+            REFERRAL_TEMPLATE.format(
+                ref_link=ref_link,
+                invited_count=invited_count,
+                paid_count=paid_count,
+                bonus_days=bonus_days,
+            ),
+            reply_markup=get_back_to_menu_keyboard(),
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in referral_handler: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)

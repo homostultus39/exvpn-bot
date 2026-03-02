@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import mapped_column, Mapped, relationship
-from sqlalchemy import func, BigInteger, Text, DateTime, UUID, Boolean, Integer, String, ForeignKey, LargeBinary
+from sqlalchemy import func, BigInteger, Text, DateTime, UUID, Boolean, Integer, String, ForeignKey, LargeBinary, UniqueConstraint
 
 from bot.database.base import Base
 
@@ -39,6 +39,7 @@ class UserModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
     user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    referrer_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     aggreed_to_terms: Mapped[bool] = mapped_column(nullable=True, default=False)
     subscription_status: Mapped[SubscriptionStatus] = mapped_column(String(50), default=SubscriptionStatus.EXPIRED.value, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -106,3 +107,32 @@ class PendingPaymentModel(Base, UUIDMixin, TimestampMixin):
     order_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
     payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class PromoCodeModel(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "promo_codes"
+
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    days: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    used_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    usages: Mapped[list["PromoCodeUsageModel"]] = relationship(
+        "PromoCodeUsageModel",
+        back_populates="promo_code",
+        cascade="all, delete-orphan",
+        uselist=True,
+    )
+
+
+class PromoCodeUsageModel(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "promo_code_usages"
+    __table_args__ = (
+        UniqueConstraint("promo_code_id", "user_id", name="uq_promo_code_usage_per_user"),
+    )
+
+    promo_code_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("promo_codes.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    promo_code: Mapped["PromoCodeModel"] = relationship("PromoCodeModel", back_populates="usages")

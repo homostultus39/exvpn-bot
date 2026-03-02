@@ -25,6 +25,7 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text="🔑 Получить ключ")],
         [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💎 Подписка")],
+        [KeyboardButton(text="🎟 Ввести промокод")],
         [KeyboardButton(text="🚨 Сообщение об ошибке")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -122,6 +123,10 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="💎 Продлить подписку",
             callback_data="extend_subscription"
+        )],
+        [InlineKeyboardButton(
+            text="🎁 Реферальная программа",
+            callback_data="referral"
         )],
         [InlineKeyboardButton(
             text="🔑 Мои ключи",

@@ -7,7 +7,12 @@ from bot.messages.user import WELCOME_MESSAGE, MAIN_MENU_MESSAGE, CLIENT_INFO
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
 from bot.database.connection import get_session
-from bot.database.management.operations.user import get_user_by_user_id, get_or_create_user_record, make_terms_confirmed
+from bot.database.management.operations.user import (
+    get_user_by_user_id,
+    get_or_create_user_record,
+    make_terms_confirmed,
+    set_referrer,
+)
 
 
 router = Router()
@@ -18,6 +23,18 @@ logger = configure_logger("START_ROUTER", "green")
 @router.message(CommandStart())
 async def start_command_handler(message: Message):
     user_id = message.from_user.id
+    start_param = None
+    message_text = (message.text or "").strip()
+    parts = message_text.split(maxsplit=1)
+    if len(parts) > 1:
+        start_param = parts[1].strip()
+
+    referrer_id = None
+    if start_param and start_param.startswith("ref_"):
+        ref_value = start_param.removeprefix("ref_")
+        if ref_value.isdigit():
+            referrer_id = int(ref_value)
+
     try:
         async with get_session() as session:
             existing_record = await get_user_by_user_id(session, user_id)
@@ -33,8 +50,16 @@ async def start_command_handler(message: Message):
                 sent_menu = await message.answer(MAIN_MENU_MESSAGE, reply_markup=get_main_menu_keyboard())
                 store(message.chat.id, sent_info.message_id, sent_menu.message_id)
             else:
+                was_created = existing_record is None
                 await get_or_create_user_record(session, user_id)
-                logger.info(f"User with user_id {user_id} was created")
+                if was_created:
+                    logger.info(f"User with user_id {user_id} was created")
+
+                if was_created and referrer_id is not None:
+                    linked = await set_referrer(session, user_id, referrer_id)
+                    if linked:
+                        logger.info(f"Referrer {referrer_id} linked for user {user_id}")
+
                 await message.answer(
                     WELCOME_MESSAGE,
                     reply_markup=get_agreement_keyboard(settings)

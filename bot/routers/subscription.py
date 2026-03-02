@@ -1,12 +1,16 @@
 from aiogram import Router, F, Bot
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, LabeledPrice
 
 from bot.database.management.operations.tariffs import get_all_tariffs
 from bot.database.management.operations.user import (
+    add_days_to_subscription,
     get_user_by_user_id,
     is_trial_used,
     update_user_subscription,
 )
+from bot.database.management.operations.promo import use_promocode
 from bot.management.logger import configure_logger
 from bot.management.message_tracker import store, delete_last
 from bot.database.connection import get_session
@@ -33,6 +37,10 @@ router.callback_query.middleware(AcceptedTermsMiddleware())
 logger = configure_logger("SUBSCRIPTION_ROUTER", "yellow")
 
 
+class PromoCodeState(StatesGroup):
+    waiting_for_code = State()
+
+
 async def _activate_subscription(user_id: int, tariff_code: str) -> None:
     async with get_session() as session:
         await update_user_subscription(session, user_id, tariff_code)
@@ -53,6 +61,83 @@ async def subscription_menu_handler(message: Message):
     except Exception as e:
         logger.error(f"subscription_menu_handler: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
+
+@router.message(F.text == "🎟 Ввести промокод")
+async def enter_promocode_handler(message: Message, state: FSMContext):
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await delete_last(message.bot, message.chat.id)
+
+    await state.set_state(PromoCodeState.waiting_for_code)
+    sent = await message.answer(
+        "🎟 <b>Введите промокод</b>\n\n"
+        "Отправьте код одним сообщением.\n"
+        "Для отмены нажмите кнопку ниже.",
+        reply_markup=get_back_to_menu_keyboard(),
+    )
+    store(message.chat.id, sent.message_id)
+
+
+@router.message(PromoCodeState.waiting_for_code)
+async def process_promocode_handler(message: Message, state: FSMContext):
+    raw_text = (message.text or "").strip()
+    if not raw_text:
+        await message.answer("❌ Отправьте промокод текстом.", reply_markup=get_main_menu_keyboard())
+        return
+
+    code = raw_text.upper()
+    user_id = message.from_user.id
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    async with get_session() as session:
+        user = await get_user_by_user_id(session, user_id)
+        if user and user.is_admin:
+            await state.clear()
+            await message.answer(
+                "ℹ️ Администраторам подписка не требуется, промокоды не применяются.",
+                reply_markup=get_main_menu_keyboard(),
+            )
+            return
+
+        result = await use_promocode(session, code, user_id)
+        if not result:
+            await state.clear()
+            await message.answer(
+                f"❌ Промокод <code>{code}</code> не найден, истёк или исчерпан.",
+                reply_markup=get_main_menu_keyboard(),
+            )
+            return
+
+        if result.get("error") == "already_used":
+            await state.clear()
+            await message.answer(
+                f"⚠️ Вы уже использовали промокод <code>{result['code']}</code>.",
+                reply_markup=get_main_menu_keyboard(),
+            )
+            return
+
+        days = int(result["days"])
+        applied = await add_days_to_subscription(session, user_id, days)
+
+    await state.clear()
+    if not applied:
+        await message.answer(
+            "❌ Не удалось применить промокод. Попробуйте позже.",
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+
+    await message.answer(
+        f"✅ Промокод <code>{result['code']}</code> активирован!\n\n"
+        f"🎁 Добавлено <b>{result['days']} дней</b> к подписке.",
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "back_to_tariffs")
@@ -343,7 +428,8 @@ async def cancel_payment_handler(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "back_to_menu")
-async def back_to_menu_handler(callback: CallbackQuery):
+async def back_to_menu_handler(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await callback.message.delete()
     chat_id = callback.message.chat.id
     sent_info = await callback.message.answer(CLIENT_INFO)

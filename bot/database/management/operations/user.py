@@ -59,6 +59,64 @@ async def get_or_create_user_record(session: AsyncSession, user_id: int) -> User
     await session.refresh(user)
     return user
 
+
+async def set_referrer(session: AsyncSession, user_id: int, referrer_id: int) -> bool:
+    if user_id == referrer_id:
+        return False
+
+    selected_user = await get_user_by_user_id(session, user_id)
+    referrer_user = await get_user_by_user_id(session, referrer_id)
+    if selected_user is None or referrer_user is None:
+        return False
+    if selected_user.referrer_id is not None:
+        return False
+
+    selected_user.referrer_id = referrer_id
+    session.add(selected_user)
+    await session.commit()
+    return True
+
+
+async def add_days_to_subscription(session: AsyncSession, user_id: int, days: int) -> bool:
+    if days <= 0:
+        return False
+
+    selected_user = await get_user_by_user_id(session, user_id)
+    if selected_user is None:
+        return False
+    if selected_user.is_admin:
+        return False
+
+    tz = pytz.timezone(get_settings().timezone)
+    now = datetime.now(tz)
+    if selected_user.expires_at and selected_user.expires_at > now:
+        selected_user.expires_at = selected_user.expires_at + timedelta(days=days)
+    else:
+        selected_user.expires_at = now + timedelta(days=days)
+
+    selected_user.subscription_status = SubscriptionStatus.ACTIVE.value
+    session.add(selected_user)
+    await session.commit()
+    return True
+
+
+async def get_referral_stats(session: AsyncSession, user_id: int) -> tuple[int, int, int]:
+    invited_result = await session.execute(
+        select(UserModel).where(UserModel.referrer_id == user_id)
+    )
+    invited_users = list(invited_result.scalars().all())
+
+    invited_count = len(invited_users)
+    paid_count = sum(
+        1
+        for user in invited_users
+        if user.subscription_status in (SubscriptionStatus.ACTIVE.value, SubscriptionStatus.EXPIRED.value)
+        and user.expires_at is not None
+    )
+    bonus_days = paid_count * 7
+    return invited_count, paid_count, bonus_days
+
+
 async def make_terms_confirmed(session: AsyncSession, user_id: int) -> None:
     selected_user = await get_user_by_user_id(session, user_id)
     selected_user.aggreed_to_terms = True
@@ -105,8 +163,23 @@ async def register_user_by_admin(
 
 async def update_user_subscription(session: AsyncSession, user_id: int, tariff_code: str) -> None:
     selected_user = await get_user_by_user_id(session, user_id)
-    if selected_user and selected_user.is_admin:
+    if selected_user is None:
         return
+    if selected_user.is_admin:
+        return
+
+    should_grant_referral_bonus = (
+        selected_user is not None
+        and selected_user.referrer_id is not None
+        and tariff_code != "trial"
+        and (
+            selected_user.subscription_status == SubscriptionStatus.TRIAL.value
+            or (
+                selected_user.subscription_status == SubscriptionStatus.EXPIRED.value
+                and selected_user.expires_at is None
+            )
+        )
+    )
 
     tariff = await get_tariff_by_code(session, tariff_code)
 
@@ -122,6 +195,9 @@ async def update_user_subscription(session: AsyncSession, user_id: int, tariff_c
 
     session.add(selected_user)
     await session.commit()
+
+    if should_grant_referral_bonus:
+        await add_days_to_subscription(session, selected_user.referrer_id, 7)
 
 async def is_trial_used(session: AsyncSession, user_id: int) -> bool:
     selected_user = await get_user_by_user_id(session, user_id)
