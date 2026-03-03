@@ -18,6 +18,8 @@ from bot.keyboards.admin import (
     get_admin_menu_keyboard,
     get_cluster_actions_keyboard,
     get_cluster_edit_keyboard,
+    get_cluster_region_keyboard,
+    get_cluster_type_keyboard,
     get_clusters_keyboard,
     get_fsm_keyboard,
 )
@@ -37,7 +39,14 @@ _FIELD_LABELS = {
     "endpoint": "Endpoint",
     "username": "Username",
     "password": "Password",
+    "is_whitelist_gateway": "Тип (whitelist)",
+    "region_code": "Код региона",
 }
+_REGION_CODES = {"nl", "de", "fi"}
+
+
+def _cluster_type_label(is_whitelist_gateway: bool) -> str:
+    return "Whitelist" if is_whitelist_gateway else "Standard"
 
 class ClusterState(StatesGroup):
     cluster_id = State()
@@ -91,6 +100,8 @@ async def cluster_info_handler(callback: CallbackQuery):
             name=cluster.public_name,
             id=cluster.id,
             endpoint=cluster.endpoint,
+            cluster_type=_cluster_type_label(cluster.is_whitelist_gateway),
+            region_code=cluster.region_code or "—",
             total_peers=peer_count,
         )
 
@@ -143,6 +154,23 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
     label = _FIELD_LABELS.get(field, field)
 
     try:
+        if field == "is_whitelist_gateway":
+            normalized = value.lower()
+            if normalized in {"да", "yes", "true", "1"}:
+                value = True
+            elif normalized in {"нет", "no", "false", "0"}:
+                value = False
+            else:
+                raise ValueError("invalid boolean value")
+        elif field == "region_code":
+            normalized = value.lower()
+            if normalized in {"-", "none", "null", "пусто"}:
+                value = None
+            elif normalized not in _REGION_CODES:
+                raise ValueError("invalid region code")
+            else:
+                value = normalized
+
         cluster_id = UUID(cluster_id_raw)
         async with get_session() as session:
             cluster = await get_cluster_by_id(session, cluster_id)
@@ -155,7 +183,8 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             cluster = await update_cluster(
                 session,
                 cluster.id,
-                **{field: value}
+                **{field: value},
+                force_update_region_code=(field == "region_code"),
             )
             if cluster is None:
                 await _edit_prompt(
@@ -171,6 +200,8 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             id=cluster.id,
             name=cluster.public_name,
             endpoint=cluster.endpoint,
+            cluster_type=_cluster_type_label(cluster.is_whitelist_gateway),
+            region_code=cluster.region_code or "—",
             total_peers=peers_count,
         )
         await _edit_prompt(bot, data, text, get_cluster_actions_keyboard(str(cluster.id)))
@@ -255,6 +286,8 @@ class ClusterCreateForm(StatesGroup):
     waiting_for_endpoint = State()
     waiting_for_username = State()
     waiting_for_password = State()
+    waiting_for_cluster_type = State()
+    waiting_for_region_code = State()
 
 
 async def _edit_prompt(bot: Bot, data: dict, text: str, keyboard) -> None:
@@ -289,7 +322,7 @@ async def start_cluster_create(callback: CallbackQuery, state: FSMContext, bot: 
     await callback.message.delete()
     msg = await callback.message.answer(
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 1/4: Введите название кластера\n"
+        "Шаг 1/6: Введите название кластера\n"
         "(Например: 🇳🇱 Нидерланды)",
         reply_markup=get_fsm_keyboard(PREFIX, back=False)
     )
@@ -307,7 +340,7 @@ async def process_cluster_name(message: Message, state: FSMContext, bot: Bot):
     await _edit_prompt(
         bot, data,
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 2/4: Введите endpoint кластера\n"
+        "Шаг 2/6: Введите endpoint кластера\n"
         "(Например: vpn-nl.example.com или 1.2.3.4:443)",
         get_fsm_keyboard(PREFIX, back=True)
     )
@@ -318,7 +351,7 @@ async def process_cluster_name(message: Message, state: FSMContext, bot: Bot):
 async def cc_back_to_name(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 1/4: Введите название кластера\n"
+        "Шаг 1/6: Введите название кластера\n"
         "(Например: 🇳🇱 Нидерланды)",
         reply_markup=get_fsm_keyboard(PREFIX, back=False)
     )
@@ -335,7 +368,7 @@ async def process_cluster_endpoint(message: Message, state: FSMContext, bot: Bot
     await _edit_prompt(
         bot, data,
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 3/4: Введите имя пользователя кластера\n"
+        "Шаг 3/6: Введите имя пользователя кластера\n"
         "(Имя пользователя для авторизации на кластере)",
         get_fsm_keyboard(PREFIX, back=True)
     )
@@ -346,7 +379,7 @@ async def process_cluster_endpoint(message: Message, state: FSMContext, bot: Bot
 async def cc_back_to_endpoint(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 2/4: Введите endpoint кластера\n"
+        "Шаг 2/6: Введите endpoint кластера\n"
         "(Например: vpn-nl.example.com или 1.2.3.4:443)",
         reply_markup=get_fsm_keyboard(PREFIX, back=True)
     )
@@ -363,7 +396,7 @@ async def process_cluster_username(message: Message, state: FSMContext, bot: Bot
     await _edit_prompt(
         bot, data,
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 4/4: Введите пароль пользователя кластера\n"
+        "Шаг 4/6: Введите пароль пользователя кластера\n"
         "(Пароль для авторизации на кластере)",
         get_fsm_keyboard(PREFIX, back=True)
     )
@@ -374,7 +407,7 @@ async def process_cluster_username(message: Message, state: FSMContext, bot: Bot
 async def cc_back_to_username(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "➕ <b>Создание кластера</b>\n\n"
-        "Шаг 3/4: Введите имя пользователя кластера\n"
+        "Шаг 3/6: Введите имя пользователя кластера\n"
         "(Имя пользователя для авторизации на кластере)",
         reply_markup=get_fsm_keyboard(PREFIX, back=True)
     )
@@ -389,6 +422,77 @@ async def process_cluster_password(message: Message, state: FSMContext, bot: Bot
     await state.update_data(password=password)
     data = await state.get_data()
 
+    await _edit_prompt(
+        bot, data,
+        "➕ <b>Создание кластера</b>\n\n"
+        "Шаг 5/6: Выберите тип кластера",
+        get_cluster_type_keyboard(PREFIX),
+    )
+    await state.set_state(ClusterCreateForm.waiting_for_cluster_type)
+
+
+@router.callback_query(ClusterCreateForm.waiting_for_cluster_type, F.data == f"{PREFIX}_back")
+async def cc_back_to_password(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "➕ <b>Создание кластера</b>\n\n"
+        "Шаг 4/6: Введите пароль пользователя кластера\n"
+        "(Пароль для авторизации на кластере)",
+        reply_markup=get_fsm_keyboard(PREFIX, back=True)
+    )
+    await state.set_state(ClusterCreateForm.waiting_for_password)
+    await callback.answer()
+
+
+@router.callback_query(ClusterCreateForm.waiting_for_cluster_type, F.data == f"{PREFIX}_type_whitelist")
+async def cc_type_whitelist(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.update_data(is_whitelist_gateway=True, region_code=None)
+    data = await state.get_data()
+    await _create_cluster_from_state(callback.from_user.id, bot, data, state)
+    await callback.answer()
+
+
+@router.callback_query(ClusterCreateForm.waiting_for_cluster_type, F.data == f"{PREFIX}_type_standard")
+async def cc_type_standard(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(is_whitelist_gateway=False)
+    await callback.message.edit_text(
+        "➕ <b>Создание кластера</b>\n\n"
+        "Шаг 6/6: Выберите код региона",
+        reply_markup=get_cluster_region_keyboard(PREFIX),
+    )
+    await state.set_state(ClusterCreateForm.waiting_for_region_code)
+    await callback.answer()
+
+
+@router.callback_query(ClusterCreateForm.waiting_for_region_code, F.data == f"{PREFIX}_back")
+async def cc_back_to_type(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "➕ <b>Создание кластера</b>\n\n"
+        "Шаг 5/6: Выберите тип кластера",
+        reply_markup=get_cluster_type_keyboard(PREFIX),
+    )
+    await state.set_state(ClusterCreateForm.waiting_for_cluster_type)
+    await callback.answer()
+
+
+@router.callback_query(ClusterCreateForm.waiting_for_region_code, F.data.startswith(f"{PREFIX}_region_"))
+async def cc_select_region(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    region_code = callback.data.removeprefix(f"{PREFIX}_region_").lower()
+    if region_code not in _REGION_CODES:
+        await callback.answer("❌ Неверный код региона", show_alert=True)
+        return
+
+    await state.update_data(region_code=region_code)
+    data = await state.get_data()
+    await _create_cluster_from_state(callback.from_user.id, bot, data, state)
+    await callback.answer()
+
+
+async def _create_cluster_from_state(
+    admin_user_id: int,
+    bot: Bot,
+    data: dict,
+    state: FSMContext,
+) -> None:
     try:
         async with get_session() as session:
             cluster = await get_or_create_cluster(
@@ -396,20 +500,29 @@ async def process_cluster_password(message: Message, state: FSMContext, bot: Bot
                 public_name=data["name"],
                 endpoint=data["endpoint"],
                 username=data["username"],
-                password=data["password"]
+                password=data["password"],
+                is_whitelist_gateway=bool(data.get("is_whitelist_gateway", False)),
+                region_code=data.get("region_code"),
             )
 
         await _delete_prompt(bot, data)
-        await message.answer(
-            f"✅ <b>Кластер создан!</b>\n\n"
-            f"🌐 Название: {cluster.public_name}\n"
-            f"🆔 ID: <code>{cluster.id}</code>\n"
-            f"🌍 Endpoint: {cluster.endpoint}\n\n"
-            f"Кластер готов к использованию!",
-            reply_markup=get_admin_menu_keyboard()
+        await bot.send_message(
+            chat_id=data["prompt_chat_id"],
+            text=(
+                "✅ <b>Кластер создан!</b>\n\n"
+                f"🌐 Название: {cluster.public_name}\n"
+                f"🆔 ID: <code>{cluster.id}</code>\n"
+                f"🌍 Endpoint: {cluster.endpoint}\n"
+                f"🧭 Тип: {_cluster_type_label(cluster.is_whitelist_gateway)}\n"
+                f"🏷 Регион: {cluster.region_code or '—'}\n\n"
+                "Кластер готов к использованию!"
+            ),
+            reply_markup=get_admin_menu_keyboard(),
         )
-        logger.info(f"Admin {message.from_user.id} created cluster {cluster.id} ({cluster.public_name})")
-
+        logger.info(
+            f"Admin {admin_user_id} created cluster {cluster.id} ({cluster.public_name})"
+        )
+        await state.clear()
     except Exception as e:
         logger.error(f"Error creating cluster: {e}")
         await _edit_prompt(
@@ -417,10 +530,7 @@ async def process_cluster_password(message: Message, state: FSMContext, bot: Bot
             f"❌ <b>Ошибка при создании кластера</b>\n\n"
             f"<code>{str(e)}</code>\n\n"
             f"Проверьте введённые данные и попробуйте снова:",
-            get_fsm_keyboard(PREFIX, back=True)
+            get_cluster_type_keyboard(PREFIX),
         )
-        await state.set_state(ClusterCreateForm.waiting_for_password)
-        return
-
-    await state.clear()
+        await state.set_state(ClusterCreateForm.waiting_for_cluster_type)
     

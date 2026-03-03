@@ -104,8 +104,12 @@ async def my_keys_handler(callback: CallbackQuery):
             for peer in peers:
                 cluster = await get_cluster_by_id(session, peer.cluster_id)
                 cluster_name = cluster.public_name if cluster else "Неизвестно"
+                key_type_label = "Белый список" if peer.key_type == "whitelist" else "VPN"
+                region_label = (peer.region_code or "—").upper()
                 await callback.message.answer(
-                    f"🌍 {cluster_name}\n🔑 <code>{peer.url}</code>"
+                    f"🌍 {cluster_name} ({region_label})\n"
+                    f"🧭 Тип: {key_type_label}\n"
+                    f"🔑 <code>{peer.url}</code>"
                 )
 
             sent_info = await callback.message.answer(CLIENT_INFO)

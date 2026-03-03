@@ -117,7 +117,8 @@ async def sync_user_expiry_to_panels(
             continue
         try:
             xray_client = XrayPanelClient.from_cluster(cluster)
-            await xray_client.update_client(user_id, expires_at)
+            client_email = peer.client_email or str(user_id)
+            await xray_client.update_client(client_email, expires_at)
         except Exception:
             continue
 
@@ -277,7 +278,8 @@ async def expire_outdated_subscriptions(session: AsyncSession) -> int:
             if cluster is None:
                 continue
             xray_client = XrayPanelClient.from_cluster(cluster)
-            await xray_client.delete_client(user.user_id)
+            client_email = peer.client_email or str(user.user_id)
+            await xray_client.delete_client(client_email)
         await delete_peers_by_user(session, user.id)
         user.subscription_status = SubscriptionStatus.EXPIRED.value
         session.add(user)

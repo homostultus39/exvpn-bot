@@ -13,6 +13,8 @@ async def get_or_create_cluster(
     endpoint: str,
     username: str,
     password: str,
+    is_whitelist_gateway: bool = False,
+    region_code: str | None = None,
 ) -> ClusterModel:
     result = await session.execute(
         select(ClusterModel).where(ClusterModel.public_name == public_name)
@@ -25,6 +27,8 @@ async def get_or_create_cluster(
         public_name=public_name,
         endpoint=endpoint,
         username=username,
+        is_whitelist_gateway=is_whitelist_gateway,
+        region_code=region_code,
         encrypted_password=encrypt_password(password),
     )
     session.add(cluster)
@@ -45,6 +49,25 @@ async def get_all_clusters(session: AsyncSession) -> list[ClusterModel]:
         select(ClusterModel).order_by(ClusterModel.public_name)
     )
     return result.scalars().all()
+
+
+async def get_standard_clusters(session: AsyncSession) -> list[ClusterModel]:
+    result = await session.execute(
+        select(ClusterModel)
+        .where(ClusterModel.is_whitelist_gateway.is_(False))
+        .order_by(ClusterModel.public_name)
+    )
+    return result.scalars().all()
+
+
+async def get_whitelist_cluster(session: AsyncSession) -> ClusterModel | None:
+    result = await session.execute(
+        select(ClusterModel)
+        .where(ClusterModel.is_whitelist_gateway.is_(True))
+        .order_by(ClusterModel.created_at)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_clusters_peers_count(session: AsyncSession, cluster_id: UUID) -> int:
@@ -70,6 +93,9 @@ async def update_cluster(
     endpoint: str | None = None,
     username: str | None = None,
     password: str | None = None,
+    is_whitelist_gateway: bool | None = None,
+    region_code: str | None = None,
+    force_update_region_code: bool = False,
 ) -> ClusterModel | None:
     cluster = await get_cluster_by_id(session, cluster_id)
     if not cluster:
@@ -83,6 +109,10 @@ async def update_cluster(
         cluster.username = username
     if password is not None:
         cluster.encrypted_password = encrypt_password(password)
+    if is_whitelist_gateway is not None:
+        cluster.is_whitelist_gateway = is_whitelist_gateway
+    if force_update_region_code or region_code is not None or is_whitelist_gateway is True:
+        cluster.region_code = region_code
 
     session.add(cluster)
     await session.commit()

@@ -56,9 +56,21 @@ class UserModel(Base, UUIDMixin, TimestampMixin):
 
 class PeerModel(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "peers"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "cluster_id",
+            "key_type",
+            "region_code",
+            name="uq_peer_client_cluster_type_region",
+        ),
+    )
 
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     cluster_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clusters.id"), nullable=False, index=True)
+    key_type: Mapped[str] = mapped_column(String(16), nullable=False, default="standard", index=True)
+    region_code: Mapped[str] = mapped_column(String(8), nullable=False, default="nl", index=True)
+    client_email: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
 
     client: Mapped["UserModel"] = relationship("UserModel", back_populates="peers")
@@ -71,6 +83,8 @@ class ClusterModel(Base, UUIDMixin, TimestampMixin):
     endpoint: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     public_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_whitelist_gateway: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    region_code: Mapped[str | None] = mapped_column(String(8), nullable=True, default=None, index=True)
 
     encrypted_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 

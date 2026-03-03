@@ -40,11 +40,10 @@ class XrayPanelClient:
         message = str(error).lower()
         return "inbound not found for email" in message
 
-    async def get_client_by_email(self, user_id: int) -> Client | None:
+    async def get_client_by_email(self, client_email: str) -> Client | None:
         await self._login()
-        email = str(user_id)
         try:
-            return await self.api.client.get_by_email(email)
+            return await self.api.client.get_by_email(client_email)
         except Exception as error:
             if self._is_client_not_found_error(error):
                 return None
@@ -63,17 +62,16 @@ class XrayPanelClient:
         return self.endpoint.removeprefix("http://").removeprefix("https://").split(":")[0]
 
     @staticmethod
-    def _find_client_in_inbounds(inbounds: list[Any], user_id: int) -> tuple[Any, Any] | None:
-        email = str(user_id)
+    def _find_client_in_inbounds(inbounds: list[Any], client_email: str) -> tuple[Any, Any] | None:
         for inbound in inbounds:
             settings = getattr(inbound, "settings", None)
             clients = getattr(settings, "clients", []) if settings is not None else []
             for client in clients or []:
-                if str(getattr(client, "email", "")) == email:
+                if str(getattr(client, "email", "")) == client_email:
                     return inbound, client
         return None
 
-    def _build_connection_url(self, inbound: Any, client_id: str, user_id: int) -> str:
+    def _build_connection_url(self, inbound: Any, client_id: str, client_label: str) -> str:
         protocol = str(getattr(inbound, "protocol", "vless") or "vless")
         host = self._endpoint_host()
         port = int(getattr(inbound, "port", 443) or 443)
@@ -135,41 +133,43 @@ class XrayPanelClient:
                     params.append(("spx", spider_x))
 
         fragment_label = str(getattr(inbound, "remark", "ExVPN") or "ExVPN")
-        fragment = quote(f"{fragment_label}-{user_id}")
+        fragment = quote(f"{fragment_label}-{client_label}")
         query = urlencode(params, doseq=True, quote_via=quote)
         return f"{protocol}://{client_id}@{host}:{port}?{query}#{fragment}"
 
-    def _get_connection_url_from_inbounds(self, inbounds: list[Any], user_id: int) -> str | None:
-        found = self._find_client_in_inbounds(inbounds, user_id)
+    def _get_connection_url_from_inbounds(self, inbounds: list[Any], client_email: str) -> str | None:
+        found = self._find_client_in_inbounds(inbounds, client_email)
         if found is None:
             return None
         inbound, client = found
         client_id = str(getattr(client, "id", "") or "")
         if not client_id:
             return None
-        return self._build_connection_url(inbound, client_id, user_id)
+        return self._build_connection_url(inbound, client_id, client_email)
 
     async def get_inbounds_list(self):
         await self._login()
         return await self.api.inbound.get_list()
 
-    async def get_connection_url(self, user_id: int) -> str | None:
+    async def get_connection_url(self, client_email: str) -> str | None:
         await self._login()
         inbounds = await self.api.inbound.get_list()
-        return self._get_connection_url_from_inbounds(inbounds, user_id)
+        return self._get_connection_url_from_inbounds(inbounds, client_email)
 
-    async def add_client(self, user_id: int, expires_at: datetime | None) -> str:
+    async def add_client(
+        self, user_id: int, expires_at: datetime | None, client_email: str | None = None
+    ) -> str:
         await self._login()
         inbounds = await self.api.inbound.get_list()
         if not inbounds:
             raise ValueError("No inbounds found on cluster")
 
-        existing_url = self._get_connection_url_from_inbounds(inbounds, user_id)
+        email = client_email or str(user_id)
+        existing_url = self._get_connection_url_from_inbounds(inbounds, email)
         if existing_url:
             return existing_url
 
         inbound = inbounds[0]
-        email = str(user_id)
         client_id = str(uuid.uuid4())
         client = Client(
             id=client_id,
@@ -180,12 +180,12 @@ class XrayPanelClient:
             limit_ip=0,
         )
         await self.api.client.add(inbound.id, [client])
-        return self._build_connection_url(inbound, client_id, user_id)
+        return self._build_connection_url(inbound, client_id, email)
 
-    async def delete_client(self, user_id: int) -> None:
+    async def delete_client(self, client_email: str) -> None:
         await self._login()
         inbounds = await self.api.inbound.get_list()
-        found = self._find_client_in_inbounds(inbounds, user_id)
+        found = self._find_client_in_inbounds(inbounds, client_email)
         if found is None:
             return
         _, existing = found
@@ -193,10 +193,10 @@ class XrayPanelClient:
         if client_id:
             await self.api.client.delete(client_id)
 
-    async def update_client(self, user_id: int, expires_at: datetime | None) -> None:
+    async def update_client(self, client_email: str, expires_at: datetime | None) -> None:
         await self._login()
         inbounds = await self.api.inbound.get_list()
-        found = self._find_client_in_inbounds(inbounds, user_id)
+        found = self._find_client_in_inbounds(inbounds, client_email)
         if found is None:
             return
         _, existing = found

@@ -46,7 +46,8 @@ def get_cluster_actions_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
 def get_cluster_edit_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
     fields = [
         ("Название", "public_name"), ("Endpoint", "endpoint"),
-        ("Username", "username"), ("Password", "password")
+        ("Username", "username"), ("Password", "password"),
+        ("Тип (Whitelist)", "is_whitelist_gateway"), ("Код региона", "region_code")
     ]
     buttons = [
         [InlineKeyboardButton(text=label, callback_data=f"cef:{key}")]
@@ -54,6 +55,27 @@ def get_cluster_edit_keyboard(cluster_id: str) -> InlineKeyboardMarkup:
     ]
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin_cluster_view_{cluster_id}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_cluster_type_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="VPN (+WARP)", callback_data=f"{prefix}_type_standard")],
+        [InlineKeyboardButton(text="Белые списки", callback_data=f"{prefix}_type_whitelist")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")],
+    ])
+
+
+def get_cluster_region_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🇳🇱 NL", callback_data=f"{prefix}_region_nl"),
+            InlineKeyboardButton(text="🇩🇪 DE", callback_data=f"{prefix}_region_de"),
+            InlineKeyboardButton(text="🇫🇮 FI", callback_data=f"{prefix}_region_fi"),
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")],
+    ])
 
 def get_clients_keyboard() -> InlineKeyboardMarkup:
     buttons = [

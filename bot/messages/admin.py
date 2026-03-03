@@ -14,6 +14,8 @@ CLUSTER_INFO_TEMPLATE = """🌐 <b>Кластер: {name}</b>
 
 🆔 ID: <code>{id}</code>
 🌍 Endpoint: {endpoint}
+🧭 Тип: {cluster_type}
+🏷 Регион: {region_code}
 🔌 Количество пиров: {total_peers}"""
 
 
