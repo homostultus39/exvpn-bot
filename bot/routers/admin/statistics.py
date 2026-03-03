@@ -83,6 +83,19 @@ async def stats_global_handler(callback: CallbackQuery):
                 [user for user in users if user.subscription_status == SubscriptionStatus.EXPIRED.value]
             )
 
+        total_rx = 0
+        total_tx = 0
+        peers_online = 0
+        for cluster in clusters:
+            try:
+                panel_client = XrayPanelClient.from_cluster(cluster)
+                stats = await panel_client.get_cluster_stats()
+                total_rx += stats.get("rx_bytes", 0) or 0
+                total_tx += stats.get("tx_bytes", 0) or 0
+                peers_online += stats.get("clients_online", 0) or 0
+            except Exception as e:
+                logger.warning(f"Cluster {cluster.public_name} stats unavailable: {e}")
+
         text = GLOBAL_STATS_TEMPLATE.format(
             clusters_total=len(clusters),
             clusters_active=len(clusters),
@@ -92,9 +105,9 @@ async def stats_global_handler(callback: CallbackQuery):
             clients_trial=clients_trial,
             clients_expired=clients_expired,
             peers_total=peers_total,
-            peers_online=0,
-            rx=_fmt_bytes(0),
-            tx=_fmt_bytes(0),
+            peers_online=peers_online,
+            rx=_fmt_bytes(total_rx),
+            tx=_fmt_bytes(total_tx),
         )
         await callback.message.edit_text(text, reply_markup=get_stats_back_keyboard())
         await callback.answer()
