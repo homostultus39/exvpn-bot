@@ -47,6 +47,13 @@ def _parse_whitelist_mode_callback(data: str) -> tuple[UUID, str | None]:
     return UUID(cluster_id_raw), region_code.lower()
 
 
+async def _show_key_error_with_menu(callback: CallbackQuery, text: str) -> None:
+    try:
+        await callback.message.edit_text(text, reply_markup=get_back_to_menu_keyboard())
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_back_to_menu_keyboard())
+
+
 async def _issue_standard_key(callback: CallbackQuery, cluster_id: UUID) -> None:
     telegram_id = callback.from_user.id
     async with get_session() as session:
@@ -276,6 +283,10 @@ async def location_selected_handler(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in location_selected_handler: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+        await _show_key_error_with_menu(
+            callback,
+            "❌ Произошла ошибка при выборе локации. Попробуйте позже.",
+        )
 
 
 @router.callback_query(F.data.startswith("key_mode:standard:"))
@@ -286,6 +297,10 @@ async def key_mode_standard_handler(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in key_mode_standard_handler: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+        await _show_key_error_with_menu(
+            callback,
+            "❌ Не удалось выдать стандартный ключ. Попробуйте позже.",
+        )
 
 
 @router.callback_query(F.data.startswith("key_mode:whitelist:"))
@@ -306,3 +321,7 @@ async def key_mode_whitelist_handler(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in key_mode_whitelist_handler: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
+        await _show_key_error_with_menu(
+            callback,
+            "❌ Не удалось выдать ключ белого списка. Попробуйте позже.",
+        )

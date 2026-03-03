@@ -7,6 +7,7 @@ from py3xui import AsyncApi, Client
 
 from bot.database.models import ClusterModel
 from bot.management.password import decrypt_password
+from bot.management.settings import get_settings
 
 
 def _normalize_endpoint(endpoint: str) -> str:
@@ -19,7 +20,12 @@ def _normalize_endpoint(endpoint: str) -> str:
 class XrayPanelClient:
     def __init__(self, endpoint: str, username: str, password: str):
         self.endpoint = _normalize_endpoint(endpoint)
-        self.api = AsyncApi(self.endpoint, username, password)
+        self.api = AsyncApi(
+            self.endpoint,
+            username,
+            password,
+            use_tls_verify=not get_settings().xray_skip_ssl_verify,
+        )
         self._is_logged_in = False
 
     @classmethod

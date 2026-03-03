@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     timezone: str = "UTC"
     trial_period_days: int = 3
     referral_bonus_days: int = 7
+    xray_skip_ssl_verify: bool = False
     password_encryption_key: str = ""
 
     privacy_policy_url: str

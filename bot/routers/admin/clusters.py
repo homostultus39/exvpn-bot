@@ -150,7 +150,11 @@ async def cluster_edit_handler(callback: CallbackQuery, state: FSMContext):
 async def cluster_edit_field_handler(callback: CallbackQuery, state: FSMContext):
     field = callback.data.removeprefix("cef:")
     label = _FIELD_LABELS.get(field, field)
-    await state.update_data(edit_field=field)
+    await state.update_data(
+        edit_field=field,
+        prompt_msg_id=callback.message.message_id,
+        prompt_chat_id=callback.message.chat.id,
+    )
     if field == "is_whitelist_gateway":
         await state.set_state(ClusterState.edit_choice)
         await callback.message.edit_text(
@@ -161,7 +165,7 @@ async def cluster_edit_field_handler(callback: CallbackQuery, state: FSMContext)
         await state.set_state(ClusterState.edit_value)
         await callback.message.edit_text(
             f"✏️ Введите новое значение для <b>{label}</b>:",
-            reply_markup=get_fsm_keyboard(PREFIX)
+            reply_markup=get_fsm_keyboard(CEF_PREFIX, back=True)
         )
     await callback.answer()
 
@@ -221,6 +225,7 @@ async def cluster_edit_bool_handler(callback: CallbackQuery, state: FSMContext):
             text,
             reply_markup=get_cluster_actions_keyboard(str(cluster.id)),
         )
+        await callback.message.answer("🔐 Вы в главном меню.", reply_markup=get_admin_menu_keyboard())
         logger.info(
             f"Cluster {cluster_id_raw} field '{field}' updated by admin {callback.from_user.id}"
         )
@@ -228,6 +233,32 @@ async def cluster_edit_bool_handler(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Error updating cluster bool field: {e}")
         await callback.answer("❌ Ошибка при обновлении", show_alert=True)
+
+
+@router.callback_query(ClusterState.edit_value, F.data == f"{CEF_PREFIX}_back")
+async def cluster_edit_value_back_handler(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    cluster_id_raw = data.get("cluster_id")
+    if not cluster_id_raw:
+        await callback.answer("❌ Неверное состояние формы.", show_alert=True)
+        await state.clear()
+        return
+
+    await state.set_state(ClusterState.edit_choice)
+    await callback.message.edit_text(
+        "✏️ <b>Редактирование кластера</b>\n\nВыберите поле для изменения:",
+        reply_markup=get_cluster_edit_keyboard(cluster_id_raw),
+    )
+    await callback.answer()
+
+
+@router.callback_query(ClusterState.edit_value, F.data == f"{CEF_PREFIX}_cancel")
+async def cluster_edit_value_cancel_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    await _delete_prompt(bot, data)
+    await state.clear()
+    await callback.message.answer("❌ Редактирование кластера отменено.", reply_markup=get_admin_menu_keyboard())
+    await callback.answer()
 
 
 @router.message(ClusterState.edit_value)
@@ -248,7 +279,12 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             cluster = await get_cluster_by_id(session, cluster_id)
             if cluster is None:
                 await _edit_prompt(
-                    bot, data, "❌ Кластер не найден.", get_admin_menu_keyboard()
+                    bot, data, "❌ Кластер не найден.", None
+                )
+                await bot.send_message(
+                    data["prompt_chat_id"],
+                    "🔐 Вы в главном меню.",
+                    reply_markup=get_admin_menu_keyboard(),
                 )
                 await state.clear()
                 return
@@ -260,7 +296,12 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             )
             if cluster is None:
                 await _edit_prompt(
-                    bot, data, "❌ Кластер не найден.", get_admin_menu_keyboard()
+                    bot, data, "❌ Кластер не найден.", None
+                )
+                await bot.send_message(
+                    data["prompt_chat_id"],
+                    "🔐 Вы в главном меню.",
+                    reply_markup=get_admin_menu_keyboard(),
                 )
                 await state.clear()
                 return
@@ -277,6 +318,11 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             total_peers=peers_count,
         )
         await _edit_prompt(bot, data, text, get_cluster_actions_keyboard(str(cluster.id)))
+        await bot.send_message(
+            data["prompt_chat_id"],
+            "🔐 Вы в главном меню.",
+            reply_markup=get_admin_menu_keyboard(),
+        )
         logger.info(
             f"Cluster {cluster_id_raw} field '{field}' updated by admin {message.from_user.id}"
         )
@@ -286,7 +332,7 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             bot, data,
             f"✏️ Введите новое значение для <b>{label}</b>:\n\n"
             f"❌ {str(e) or 'Некорректное значение. Попробуйте ещё раз.'}",
-            get_fsm_keyboard(PREFIX)
+            get_fsm_keyboard(CEF_PREFIX, back=True),
         )
     except Exception as e:
         logger.error(f"Error updating tariff: {e}")
@@ -295,7 +341,7 @@ async def tariff_edit_value(message: Message, state: FSMContext, bot: Bot):
             f"✏️ Введите новое значение для <b>{label}</b>:\n\n"
             f"❌ Ошибка при обновлении: <code>{str(e)}</code>\n"
             f"Попробуйте ещё раз:",
-            get_fsm_keyboard(PREFIX)
+            get_fsm_keyboard(CEF_PREFIX, back=True),
         )
 
 @router.callback_query(F.data.startswith("admin_cluster_delete_"))
@@ -314,6 +360,7 @@ async def cluster_delete_handler(callback: CallbackQuery):
         if deleted:
             await callback.answer("✅ Кластер удалён", show_alert=True)
             await callback.message.delete()
+            await callback.message.answer("🔐 Вы в главном меню.", reply_markup=get_admin_menu_keyboard())
             logger.info(f"Cluster {cluster_id_raw} deleted by admin {callback.from_user.id}")
 
     except Exception as e:
@@ -354,6 +401,7 @@ async def clusters_back_handler(callback: CallbackQuery):
 # Дальше - логика создания и регистрации кластеров
 
 PREFIX = "cc"
+CEF_PREFIX = "cef"
 
 
 class ClusterCreateForm(StatesGroup):
