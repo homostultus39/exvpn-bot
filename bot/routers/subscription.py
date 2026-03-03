@@ -174,7 +174,7 @@ async def trial_handler(callback: CallbackQuery):
             "✅ <b>Пробный период активирован!</b>\n\n"
             f"К сроку подписки добавлено {settings.trial_period_days} дней.\n"
             "Используйте кнопку <b>🔑 Получить ключ</b> для подключения.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_back_to_menu_keyboard()
         )
         await callback.answer("Пробный период активирован")
 
