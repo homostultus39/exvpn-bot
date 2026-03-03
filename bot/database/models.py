@@ -69,7 +69,7 @@ class PeerModel(Base, UUIDMixin, TimestampMixin):
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     cluster_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clusters.id"), nullable=False, index=True)
     key_type: Mapped[str] = mapped_column(String(16), nullable=False, default="standard", index=True)
-    region_code: Mapped[str] = mapped_column(String(8), nullable=False, default="nl", index=True)
+    region_code: Mapped[str] = mapped_column(String(8), nullable=False, default="", index=True)
     client_email: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
 
