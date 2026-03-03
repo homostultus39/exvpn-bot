@@ -34,6 +34,19 @@ router = Router()
 logger = configure_logger("KEYS_ROUTER", "cyan")
 
 
+def _parse_standard_mode_callback(data: str) -> UUID:
+    cluster_id_raw = data.removeprefix("key_mode:standard:")
+    return UUID(cluster_id_raw)
+
+
+def _parse_whitelist_mode_callback(data: str) -> tuple[UUID, str | None]:
+    payload = data.removeprefix("key_mode:whitelist:")
+    if ":" not in payload:
+        return UUID(payload), None
+    cluster_id_raw, region_code = payload.split(":", maxsplit=1)
+    return UUID(cluster_id_raw), region_code.lower()
+
+
 async def _issue_standard_key(callback: CallbackQuery, cluster_id: UUID) -> None:
     telegram_id = callback.from_user.id
     async with get_session() as session:
@@ -57,7 +70,13 @@ async def _issue_standard_key(callback: CallbackQuery, cluster_id: UUID) -> None
             return
 
         xray_client = XrayPanelClient.from_cluster(cluster)
-        region_code = (cluster.region_code or "nl").lower()
+        if not cluster.region_code:
+            await callback.answer(
+                "❌ У кластера не настроен region_code. Обратитесь к администратору.",
+                show_alert=True,
+            )
+            return
+        region_code = cluster.region_code.lower()
         peer = await get_or_create_peer_for_cluster(
             session=session,
             user_db_id=user.id,
@@ -99,6 +118,12 @@ async def _issue_whitelist_key(
         selected_cluster = await get_cluster_by_id(session, selected_cluster_id)
         if selected_cluster is None:
             await callback.answer("❌ Кластер не найден", show_alert=True)
+            return
+        if selected_cluster.is_whitelist_gateway:
+            await callback.answer(
+                "❌ Неверная локация для выдачи ключа. Выберите обычную локацию.",
+                show_alert=True,
+            )
             return
 
         whitelist_cluster = await get_whitelist_cluster(session)
@@ -236,7 +261,13 @@ async def location_selected_handler(callback: CallbackQuery):
                 await callback.answer()
                 return
 
-        region_code = (cluster.region_code or "nl").lower()
+        if not cluster.region_code:
+            await callback.answer(
+                "❌ У выбранной локации не настроен region_code.",
+                show_alert=True,
+            )
+            return
+        region_code = cluster.region_code.lower()
         await callback.message.edit_text(
             SELECT_KEY_MODE.format(location=cluster.public_name),
             reply_markup=get_key_mode_keyboard(str(cluster.id), region_code),
@@ -250,9 +281,7 @@ async def location_selected_handler(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("key_mode:standard:"))
 async def key_mode_standard_handler(callback: CallbackQuery):
     try:
-        payload = callback.data.removeprefix("key_mode:standard:")
-        cluster_id_raw = payload.split(":")[0]
-        cluster_id = UUID(cluster_id_raw)
+        cluster_id = _parse_standard_mode_callback(callback.data)
         await _issue_standard_key(callback, cluster_id)
     except Exception as e:
         logger.error(f"Error in key_mode_standard_handler: {e}")
@@ -262,13 +291,17 @@ async def key_mode_standard_handler(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("key_mode:whitelist:"))
 async def key_mode_whitelist_handler(callback: CallbackQuery):
     try:
-        payload = callback.data.removeprefix("key_mode:whitelist:")
-        if ":" in payload:
-            cluster_id_raw, region_code = payload.split(":", maxsplit=1)
-        else:
-            cluster_id_raw = payload
-            region_code = "nl"
-        cluster_id = UUID(cluster_id_raw)
+        cluster_id, region_code = _parse_whitelist_mode_callback(callback.data)
+        if region_code is None:
+            async with get_session() as session:
+                selected_cluster = await get_cluster_by_id(session, cluster_id)
+                if selected_cluster is None or not selected_cluster.region_code:
+                    await callback.answer(
+                        "❌ Не удалось определить регион для белого списка.",
+                        show_alert=True,
+                    )
+                    return
+                region_code = selected_cluster.region_code.lower()
         await _issue_whitelist_key(callback, cluster_id, region_code)
     except Exception as e:
         logger.error(f"Error in key_mode_whitelist_handler: {e}")

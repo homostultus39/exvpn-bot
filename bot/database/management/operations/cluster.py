@@ -7,6 +7,16 @@ from bot.database.models import ClusterModel, PeerModel
 from bot.management.password import encrypt_password
 
 
+def _validate_cluster_mode(
+    is_whitelist_gateway: bool, region_code: str | None
+) -> tuple[bool, str | None]:
+    if is_whitelist_gateway:
+        return True, None
+    if region_code is None or not region_code.strip():
+        raise ValueError("Для стандартного кластера укажите непустой region_code.")
+    return False, region_code
+
+
 async def get_or_create_cluster(
     session: AsyncSession,
     public_name: str,
@@ -16,6 +26,10 @@ async def get_or_create_cluster(
     is_whitelist_gateway: bool = False,
     region_code: str | None = None,
 ) -> ClusterModel:
+    normalized_is_whitelist, normalized_region_code = _validate_cluster_mode(
+        is_whitelist_gateway=is_whitelist_gateway,
+        region_code=region_code,
+    )
     result = await session.execute(
         select(ClusterModel).where(ClusterModel.public_name == public_name)
     )
@@ -27,8 +41,8 @@ async def get_or_create_cluster(
         public_name=public_name,
         endpoint=endpoint,
         username=username,
-        is_whitelist_gateway=is_whitelist_gateway,
-        region_code=region_code,
+        is_whitelist_gateway=normalized_is_whitelist,
+        region_code=normalized_region_code,
         encrypted_password=encrypt_password(password),
     )
     session.add(cluster)
@@ -101,6 +115,19 @@ async def update_cluster(
     if not cluster:
         return None
 
+    next_is_whitelist = (
+        is_whitelist_gateway if is_whitelist_gateway is not None else cluster.is_whitelist_gateway
+    )
+    if force_update_region_code:
+        next_region = region_code
+    elif region_code is not None:
+        next_region = region_code
+    else:
+        next_region = cluster.region_code
+    normalized_is_whitelist, normalized_region_code = _validate_cluster_mode(
+        is_whitelist_gateway=next_is_whitelist,
+        region_code=next_region,
+    )
     if public_name is not None:
         cluster.public_name = public_name
     if endpoint is not None:
@@ -109,10 +136,9 @@ async def update_cluster(
         cluster.username = username
     if password is not None:
         cluster.encrypted_password = encrypt_password(password)
-    if is_whitelist_gateway is not None:
-        cluster.is_whitelist_gateway = is_whitelist_gateway
-    if force_update_region_code or region_code is not None or is_whitelist_gateway is True:
-        cluster.region_code = region_code
+    cluster.is_whitelist_gateway = normalized_is_whitelist
+    if force_update_region_code or region_code is not None or normalized_is_whitelist:
+        cluster.region_code = normalized_region_code
 
     session.add(cluster)
     await session.commit()

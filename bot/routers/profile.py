@@ -106,8 +106,9 @@ async def my_keys_handler(callback: CallbackQuery):
                 cluster_name = cluster.public_name if cluster else "Неизвестно"
                 key_type_label = "Белый список" if peer.key_type == "whitelist" else "VPN"
                 region_label = (peer.region_code or "—").upper()
+                cluster_role = " (шлюз white-list)" if cluster and cluster.is_whitelist_gateway else ""
                 await callback.message.answer(
-                    f"🌍 {cluster_name} ({region_label})\n"
+                    f"🌍 {cluster_name}{cluster_role} ({region_label})\n"
                     f"🧭 Тип: {key_type_label}\n"
                     f"🔑 <code>{peer.url}</code>"
                 )

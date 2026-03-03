@@ -15,17 +15,6 @@ def _build_client_email(user_id: int, key_type: str, region_code: str) -> str:
     return f"{user_id}_{normalized_region}"
 
 
-async def get_peer_by_user_and_cluster(
-    session: AsyncSession, user_db_id: UUID, cluster_id: UUID
-) -> PeerModel | None:
-    result = await session.execute(
-        select(PeerModel).where(
-            (PeerModel.client_id == user_db_id) & (PeerModel.cluster_id == cluster_id)
-        )
-    )
-    return result.scalar_one_or_none()
-
-
 async def get_peer_by_user_cluster_key_type_region(
     session: AsyncSession,
     user_db_id: UUID,
@@ -101,6 +90,19 @@ async def get_or_create_peer_for_cluster(
         key_type=key_type,
         region_code=normalized_region,
     )
+    if existing_peer is None:
+        legacy_result = await session.execute(
+            select(PeerModel)
+            .where(
+                (PeerModel.client_id == user_db_id)
+                & (PeerModel.cluster_id == cluster.id)
+                & (PeerModel.key_type == key_type)
+            )
+            .order_by(PeerModel.created_at)
+            .limit(1)
+        )
+        existing_peer = legacy_result.scalar_one_or_none()
+
     if existing_peer:
         lookup_email = existing_peer.client_email or str(user_id)
         current_url = await xray_client.get_connection_url(client_email=lookup_email)
@@ -111,6 +113,9 @@ async def get_or_create_peer_for_cluster(
                 changed = True
             if not existing_peer.client_email:
                 existing_peer.client_email = lookup_email
+                changed = True
+            if existing_peer.region_code != normalized_region:
+                existing_peer.region_code = normalized_region
                 changed = True
             if changed:
                 session.add(existing_peer)

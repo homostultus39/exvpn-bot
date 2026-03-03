@@ -66,16 +66,22 @@ def get_cluster_type_keyboard(prefix: str) -> InlineKeyboardMarkup:
     ])
 
 
-def get_cluster_region_keyboard(prefix: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def get_yes_no_keyboard(
+    prefix: str,
+    back: bool = True,
+    cancel: bool = False,
+) -> InlineKeyboardMarkup:
+    buttons = [
         [
-            InlineKeyboardButton(text="🇳🇱 NL", callback_data=f"{prefix}_region_nl"),
-            InlineKeyboardButton(text="🇩🇪 DE", callback_data=f"{prefix}_region_de"),
-            InlineKeyboardButton(text="🇫🇮 FI", callback_data=f"{prefix}_region_fi"),
-        ],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")],
-    ])
+            InlineKeyboardButton(text="✅ Да", callback_data=f"{prefix}_yes"),
+            InlineKeyboardButton(text="❌ Нет", callback_data=f"{prefix}_no"),
+        ]
+    ]
+    if back:
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")])
+    if cancel:
+        buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_clients_keyboard() -> InlineKeyboardMarkup:
     buttons = [

@@ -45,7 +45,7 @@ def get_locations_keyboard(clusters: list) -> InlineKeyboardMarkup:
 
 def get_key_mode_keyboard(cluster_id: str, region_code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="VPN (+WARP)", callback_data=f"key_mode:standard:{cluster_id}:{region_code}")],
+        [InlineKeyboardButton(text="VPN (+WARP)", callback_data=f"key_mode:standard:{cluster_id}")],
         [InlineKeyboardButton(text="Белые списки", callback_data=f"key_mode:whitelist:{cluster_id}:{region_code}")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_locations")],
     ])
