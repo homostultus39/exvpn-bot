@@ -97,6 +97,7 @@ async def get_or_create_peer_for_cluster(
                 (PeerModel.client_id == user_db_id)
                 & (PeerModel.cluster_id == cluster.id)
                 & (PeerModel.key_type == key_type)
+                & (PeerModel.region_code == "")
             )
             .order_by(PeerModel.created_at)
             .limit(1)
