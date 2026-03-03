@@ -33,6 +33,9 @@ router.callback_query.middleware(AdminMiddleware())
 
 logger = configure_logger("ADMIN_CLUSTERS", "red")
 
+PREFIX = "cc"
+CEF_PREFIX = "cef"
+
 _FIELD_LABELS = {
     "public_name": "Название",
     "endpoint": "Endpoint",
@@ -399,9 +402,6 @@ async def clusters_back_handler(callback: CallbackQuery):
 
 
 # Дальше - логика создания и регистрации кластеров
-
-PREFIX = "cc"
-CEF_PREFIX = "cef"
 
 
 class ClusterCreateForm(StatesGroup):
