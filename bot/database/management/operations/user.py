@@ -187,6 +187,32 @@ async def register_user_by_admin(
     await session.refresh(user)
     return user
 
+
+async def update_user_subscription_expiry_by_admin(
+    session: AsyncSession,
+    user_id: int,
+    expires_at: datetime,
+) -> UserModel | None:
+    selected_user = await get_user_by_user_id(session, user_id)
+    if selected_user is None:
+        return None
+    if selected_user.is_admin:
+        raise ValueError("Нельзя изменить срок подписки администратора.")
+
+    tz = pytz.timezone(get_settings().timezone)
+    selected_user.expires_at = expires_at
+    selected_user.subscription_status = (
+        SubscriptionStatus.ACTIVE.value
+        if expires_at > datetime.now(tz)
+        else SubscriptionStatus.EXPIRED.value
+    )
+
+    session.add(selected_user)
+    await session.commit()
+    await session.refresh(selected_user)
+    await sync_user_expiry_to_panels(session, user_id, selected_user.expires_at)
+    return selected_user
+
 async def update_user_subscription(session: AsyncSession, user_id: int, tariff_code: str) -> None:
     selected_user = await get_user_by_user_id(session, user_id)
     if selected_user is None:

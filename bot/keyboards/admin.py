@@ -88,9 +88,20 @@ def get_clients_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="👤 Регистрация клиента",
             callback_data="admin_register_client"
-        )]
+        )],
+        [InlineKeyboardButton(
+            text="🕒 Изменить подписку",
+            callback_data="admin_update_client_subscription"
+        )],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_client_subscription_expiration_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{prefix}_back")],
+        [InlineKeyboardButton(text="✖️ Отмена", callback_data=f"{prefix}_cancel")],
+    ])
 
 
 def get_tariffs_keyboard(tariffs: list) -> InlineKeyboardMarkup:

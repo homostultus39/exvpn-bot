@@ -15,6 +15,7 @@ from bot.routers.keys import router as keys_router
 from bot.routers.subscription import router as subscription_router
 from bot.routers.profile import router as profile_router
 from bot.routers.error_report import router as error_report_router
+from bot.routers.legacy_callbacks import router as legacy_callbacks_router
 from bot.routers.admin.main import router as admin_main_router
 from bot.routers.admin.clusters import router as admin_clusters_router
 from bot.routers.admin.clients import router as admin_clients_router
@@ -83,6 +84,7 @@ async def start_polling():
     dp.include_router(admin_promocodes_router)
     dp.include_router(admin_broadcast_router)
     dp.include_router(admin_support_router)
+    dp.include_router(legacy_callbacks_router)
 
     logger.info("Bot starting...")
     await setup_commands()

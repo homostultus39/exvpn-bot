@@ -11,11 +11,13 @@ from bot.database.connection import get_session
 from bot.database.management.operations.user import (
     get_user_by_user_id,
     register_user_by_admin,
+    update_user_subscription_expiry_by_admin,
 )
 from bot.keyboards.admin import (
     get_admin_menu_keyboard,
     get_client_register_expiration_date_keyboard,
     get_client_register_is_admin_keyboard,
+    get_client_subscription_expiration_keyboard,
     get_clients_keyboard,
     get_fsm_keyboard,
 )
@@ -29,7 +31,12 @@ router.message.middleware(AdminMiddleware())
 router.callback_query.middleware(AdminMiddleware())
 logger = configure_logger("ADMIN_CLIENTS", "red")
 
+CLIENTS_MENU_TEXT = (
+    "👥 <b>Управление клиентами</b>\n\n"
+    "Выберите действие:"
+)
 PREFIX = "cr"
+UPDATE_PREFIX = "cus"
 TIMEZONE = pytz.timezone(get_settings().timezone)
 
 
@@ -39,8 +46,21 @@ class ClientRegisterForm(StatesGroup):
     waiting_for_is_admin = State()
 
 
+class ClientSubscriptionUpdateForm(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_expiration_date = State()
+
+
 def _format_datetime(value: datetime) -> str:
     return value.astimezone(TIMEZONE).strftime("%d.%m.%Y %H:%M")
+
+
+def _parse_datetime_input(raw_value: str) -> datetime:
+    try:
+        parsed = datetime.strptime(raw_value, "%d.%m.%Y %H:%M")
+    except ValueError:
+        parsed = datetime.strptime(raw_value, "%d.%m.%Y")
+    return TIMEZONE.localize(parsed)
 
 
 async def _edit_prompt(bot: Bot, data: dict, text: str, keyboard) -> None:
@@ -65,20 +85,12 @@ async def _delete_prompt(bot: Bot, data: dict) -> None:
 @router.message(F.text == "👥 Клиенты")
 async def clients_menu_handler(message: Message, state: FSMContext, bot: Bot):
     await cancel_active_fsm(state, bot)
-    await message.answer(
-        "👥 <b>Управление клиентами</b>\n\n"
-        "Выберите действие:",
-        reply_markup=get_clients_keyboard(),
-    )
+    await message.answer(CLIENTS_MENU_TEXT, reply_markup=get_clients_keyboard())
 
 
 @router.callback_query(F.data == "admin_clients_refresh")
 async def clients_refresh_handler(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "👥 <b>Управление клиентами</b>\n\n"
-        "Выберите действие:",
-        reply_markup=get_clients_keyboard(),
-    )
+    await callback.message.edit_text(CLIENTS_MENU_TEXT, reply_markup=get_clients_keyboard())
     await callback.answer("Обновлено")
 
 
@@ -87,6 +99,14 @@ async def cancel_client_register(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
     await callback.message.answer("❌ Регистрация клиента отменена.", reply_markup=get_admin_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(StateFilter(ClientSubscriptionUpdateForm), F.data == f"{UPDATE_PREFIX}_cancel")
+async def cancel_client_subscription_update(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
+    await callback.message.answer("❌ Изменение подписки отменено.", reply_markup=get_admin_menu_keyboard())
     await callback.answer()
 
 
@@ -102,6 +122,21 @@ async def start_client_register(callback: CallbackQuery, state: FSMContext, bot:
     )
     await state.update_data(prompt_msg_id=prompt.message_id, prompt_chat_id=prompt.chat.id)
     await state.set_state(ClientRegisterForm.waiting_for_user_id)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_update_client_subscription")
+async def start_client_subscription_update(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await cancel_active_fsm(state, bot)
+    await callback.message.delete()
+    prompt = await callback.message.answer(
+        "🕒 <b>Изменение срока подписки</b>\n\n"
+        "Шаг 1/2: Введите Telegram ID пользователя\n"
+        "(Например: 123456789)",
+        reply_markup=get_fsm_keyboard(UPDATE_PREFIX, back=False),
+    )
+    await state.update_data(prompt_msg_id=prompt.message_id, prompt_chat_id=prompt.chat.id)
+    await state.set_state(ClientSubscriptionUpdateForm.waiting_for_user_id)
     await callback.answer()
 
 
@@ -167,6 +202,18 @@ async def cr_back_to_user_id(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(ClientSubscriptionUpdateForm.waiting_for_expiration_date, F.data == f"{UPDATE_PREFIX}_back")
+async def cu_back_to_user_id(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "🕒 <b>Изменение срока подписки</b>\n\n"
+        "Шаг 1/2: Введите Telegram ID пользователя\n"
+        "(Например: 123456789)",
+        reply_markup=get_fsm_keyboard(UPDATE_PREFIX, back=False),
+    )
+    await state.set_state(ClientSubscriptionUpdateForm.waiting_for_user_id)
+    await callback.answer()
+
+
 @router.callback_query(ClientRegisterForm.waiting_for_expiration_date, F.data == f"{PREFIX}_skip_expiration")
 async def skip_expiration_date(callback: CallbackQuery, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -187,13 +234,7 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
     await message.delete()
     data = await state.get_data()
     try:
-        raw_value = message.text.strip()
-        try:
-            parsed = datetime.strptime(raw_value, "%d.%m.%Y %H:%M")
-        except ValueError:
-            parsed = datetime.strptime(raw_value, "%d.%m.%Y")
-
-        expires_at = TIMEZONE.localize(parsed)
+        expires_at = _parse_datetime_input(message.text.strip())
         if expires_at <= datetime.now(TIMEZONE):
             await _edit_prompt(
                 bot,
@@ -225,6 +266,142 @@ async def process_expiration_date(message: Message, state: FSMContext, bot: Bot)
             "❌ Некорректный формат. Примеры: 31.12.2026 или 31.12.2026 23:59\n"
             "Попробуйте ещё раз:",
             get_client_register_expiration_date_keyboard(PREFIX),
+        )
+
+
+@router.message(ClientSubscriptionUpdateForm.waiting_for_user_id)
+async def process_subscription_update_user_id(message: Message, state: FSMContext, bot: Bot):
+    await message.delete()
+    data = await state.get_data()
+    try:
+        user_id = int(message.text.strip())
+        if user_id <= 0:
+            raise ValueError
+
+        async with get_session() as session:
+            existing_user = await get_user_by_user_id(session, user_id)
+
+        if existing_user is None:
+            await _edit_prompt(
+                bot,
+                data,
+                "🕒 <b>Изменение срока подписки</b>\n\n"
+                "Шаг 1/2: Введите Telegram ID пользователя\n"
+                "(Например: 123456789)\n\n"
+                "❌ Пользователь не найден. Проверьте ID и попробуйте снова.",
+                get_fsm_keyboard(UPDATE_PREFIX, back=False),
+            )
+            return
+
+        if existing_user.is_admin:
+            await _delete_prompt(bot, data)
+            await message.answer(
+                "❌ <b>Операция недоступна</b>\n\n"
+                "Для администраторов срок подписки не ограничивается.",
+                reply_markup=get_admin_menu_keyboard(),
+            )
+            await state.clear()
+            return
+
+        expires_info = (
+            "не указана"
+            if existing_user.expires_at is None
+            else _format_datetime(existing_user.expires_at)
+        )
+        await state.update_data(user_id=user_id)
+        await _edit_prompt(
+            bot,
+            data,
+            "🕒 <b>Изменение срока подписки</b>\n\n"
+            f"👤 Пользователь: <code>{existing_user.user_id}</code>\n"
+            f"📅 Текущее истечение: {expires_info}\n\n"
+            "Шаг 2/2: Введите новое время истечения подписки\n"
+            "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n"
+            "(Например: 31.12.2026 или 31.12.2026 23:59)",
+            get_client_subscription_expiration_keyboard(UPDATE_PREFIX),
+        )
+        await state.set_state(ClientSubscriptionUpdateForm.waiting_for_expiration_date)
+    except ValueError:
+        await _edit_prompt(
+            bot,
+            data,
+            "🕒 <b>Изменение срока подписки</b>\n\n"
+            "Шаг 1/2: Введите Telegram ID пользователя\n"
+            "(Например: 123456789)\n\n"
+            "❌ Некорректный ID. Введите положительное число:",
+            get_fsm_keyboard(UPDATE_PREFIX, back=False),
+        )
+
+
+@router.message(ClientSubscriptionUpdateForm.waiting_for_expiration_date)
+async def process_subscription_update_expiration(message: Message, state: FSMContext, bot: Bot):
+    await message.delete()
+    data = await state.get_data()
+    user_id = data["user_id"]
+
+    try:
+        expires_at = _parse_datetime_input(message.text.strip())
+    except ValueError:
+        await _edit_prompt(
+            bot,
+            data,
+            "🕒 <b>Изменение срока подписки</b>\n\n"
+            "Шаг 2/2: Введите новое время истечения подписки\n"
+            "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
+            "❌ Некорректный формат. Примеры: 31.12.2026 или 31.12.2026 23:59\n"
+            "Попробуйте ещё раз:",
+            get_client_subscription_expiration_keyboard(UPDATE_PREFIX),
+        )
+        return
+
+    try:
+        async with get_session() as session:
+            user = await update_user_subscription_expiry_by_admin(
+                session=session,
+                user_id=user_id,
+                expires_at=expires_at,
+            )
+
+        if user is None:
+            await _delete_prompt(bot, data)
+            await message.answer(
+                "❌ Пользователь не найден. Попробуйте снова через раздел клиентов.",
+                reply_markup=get_admin_menu_keyboard(),
+            )
+            await state.clear()
+            return
+
+        await _delete_prompt(bot, data)
+        await message.answer(
+            "✅ <b>Подписка обновлена!</b>\n\n"
+            f"👤 Telegram ID: <code>{user.user_id}</code>\n"
+            f"📅 Новое истечение: {_format_datetime(user.expires_at)}\n"
+            f"📦 Новый статус: <code>{user.subscription_status}</code>",
+            reply_markup=get_admin_menu_keyboard(),
+        )
+        logger.info(
+            f"Admin {message.from_user.id} updated subscription expiry for user {user.user_id} "
+            f"to {user.expires_at} with status {user.subscription_status}"
+        )
+        await state.clear()
+    except ValueError as error:
+        await _delete_prompt(bot, data)
+        await message.answer(
+            f"❌ <b>Операция недоступна</b>\n\n{error}",
+            reply_markup=get_admin_menu_keyboard(),
+        )
+        await state.clear()
+    except Exception as error:
+        logger.error(f"Error updating client subscription: {error}")
+        await _edit_prompt(
+            bot,
+            data,
+            "🕒 <b>Изменение срока подписки</b>\n\n"
+            "Шаг 2/2: Введите новое время истечения подписки\n"
+            "Формат: ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ\n\n"
+            f"❌ Ошибка при обновлении: <code>{error}</code>\n"
+            "Попробуйте ещё раз:",
+            get_client_subscription_expiration_keyboard(UPDATE_PREFIX),
         )
 
 
