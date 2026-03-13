@@ -1,224 +1,170 @@
 # ExVPN Bot
 
-Telegram бот для управления VPN подписками с интеграцией Central API.
+Telegram-бот для продажи VPN-подписок и выдачи ключей через панели `3x-ui`.
 
-## Архитектура
+## Что делает проект
 
-Проект построен на принципах чистой архитектуры с разделением по сущностям:
+- регистрирует пользователей Telegram и хранит их состояние в PostgreSQL;
+- продает и продлевает подписки через `Telegram Stars` и `YooKassa`;
+- выдает ключи для обычных регионов и для режима white-list;
+- синхронизирует срок действия ключей с панелями `3x-ui`;
+- автоматически снимает просроченных пользователей с панелей по расписанию;
+- дает администратору интерфейс для управления кластерами, тарифами, промокодами, рассылками и обращениями.
 
-- **core/** - базовая инфраструктура (API клиент, аутентификация, исключения)
-- **entities/** - доменные сущности (Client, Cluster, Peer, User, Subscription)
-- **routers/** - обработчики команд и callback'ов
-- **keyboards/** - клавиатуры пользователя и админа
-- **messages/** - текстовые сообщения
-- **middlewares/** - промежуточная обработка (проверка админа)
-- **management/** - настройки и dependency injection
+## Реальная архитектура
 
-## Основной функционал
+Проект не использует `Central API`. Текущая архитектура выглядит так:
 
-### Для пользователей:
-- Регистрация с принятием условий использования
-- Покупка и продление подписки (тестовая подписка для дебага)
-- Выбор региона и получение ключей подключения
-- Просмотр профиля и активных ключей
-- Автоматическое создание/переиспользование ключей для регионов
+- [bot/main.py](/home/limpizz/Projects/exvpn-bot-1/bot/main.py) - entrypoint, миграции, сидинг, запуск polling и scheduler.
+- [bot/routers](/home/limpizz/Projects/exvpn-bot-1/bot/routers) - Telegram-роутеры и пользовательские сценарии.
+- [bot/routers/admin](/home/limpizz/Projects/exvpn-bot-1/bot/routers/admin) - админские сценарии и FSM-формы.
+- [bot/database/models.py](/home/limpizz/Projects/exvpn-bot-1/bot/database/models.py) - SQLAlchemy-модели.
+- [bot/database/management/operations](/home/limpizz/Projects/exvpn-bot-1/bot/database/management/operations) - слой операций над БД и доменной логики.
+- [bot/core/xray_panel_client.py](/home/limpizz/Projects/exvpn-bot-1/bot/core/xray_panel_client.py) - адаптер к `py3xui` и панелям `3x-ui`.
+- [bot/scheduler/subscription_expiry.py](/home/limpizz/Projects/exvpn-bot-1/bot/scheduler/subscription_expiry.py) - фоновая обработка истекших подписок.
+- [bot/keyboards](/home/limpizz/Projects/exvpn-bot-1/bot/keyboards) - inline/reply keyboards.
+- [bot/messages](/home/limpizz/Projects/exvpn-bot-1/bot/messages) - шаблоны текстов.
+- [migrations](/home/limpizz/Projects/exvpn-bot-1/migrations) - Alembic-миграции.
 
-### Для администраторов:
-- Просмотр списка кластеров и их статусов
-- Перезапуск кластеров
-- Общая статистика (клиенты, кластеры, пиры)
-- Статистика клиентов
+## Основные сущности
 
-## Требования
+- `UserModel` - пользователь Telegram, подписка, trial, referrer, admin flag.
+- `ClusterModel` - одна панель `3x-ui`.
+- `PeerModel` - выданный ключ пользователя на конкретной панели.
+- `TariffModel` - тарифы и их цены.
+- `PendingPaymentModel` - ожидающие платежи.
+- `PromoCodeModel` и `PromoCodeUsageModel` - промокоды и их использования.
+- `ReportModel` - обращения в поддержку.
 
-- Python 3.14+
-- Poetry (для управления зависимостями)
-- Docker и Docker Compose (для контейнеризации)
-- Запущенный Central API
+## Как устроена работа с 3x-ui
 
-## Установка
+Каждая панель хранится в таблице `clusters`.
 
-### 1. Клонирование репозитория
+Для каждой панели сохраняются:
 
-```bash
-git clone <repository-url>
-cd exvpn-bot-1
+- `public_name`
+- `endpoint`
+- `username`
+- `encrypted_password`
+- `is_whitelist_gateway`
+- `region_code`
+
+Важно: `endpoint` должен содержать полный `Access URL`, включая `WebBasePath`.
+
+Корректный пример:
+
+```text
+https://93.177.116.96:29635/eCLrpzIQQM4MJZ1EvG
 ```
 
-### 2. Настройка окружения
+Некорректный пример:
 
-Скопируйте `.env` файл и настройте переменные:
-
-```bash
-cp .env .env.local
+```text
+https://93.177.116.96:29635
 ```
 
-Основные переменные в `.env`:
+Если у панели self-signed сертификат, включите `XRAY_SKIP_SSL_VERIFY=true`.
+
+## Технологии
+
+- Python 3.14
+- aiogram 3
+- SQLAlchemy 2 async
+- PostgreSQL
+- Alembic
+- APScheduler
+- py3xui
+- YooKassa SDK
+
+## Переменные окружения
+
+Минимально необходимые переменные:
 
 ```env
-# Telegram Bot
-API_TOKEN=your_bot_token
+API_TOKEN=your_telegram_bot_token
 ADMIN_IDS=123456789,987654321
+TIMEZONE=Europe/Moscow
 
-# Central API
-CENTRAL_API_URL=http://localhost:8000/api/v1
-CENTRAL_API_USERNAME=admin
-CENTRAL_API_PASSWORD=secret
+PASSWORD_ENCRYPTION_KEY=base64_encoded_16_byte_key
+XRAY_SKIP_SSL_VERIFY=true
 
-# Clusters (формат: CODE:EMOJI NAME:UUID)
-CLUSTERS=NL:🇳🇱 Нидерланды:uuid-nl,DE:🇩🇪 Германия:uuid-de,US:🇺🇸 США:uuid-us
+PRIVACY_POLICY_URL=https://example.com/privacy
+USER_AGREEMENT_URL=https://example.com/agreement
 
-# URLs
-PRIVACY_POLICY_URL=https://telegra.ph/your-privacy-policy
-USER_AGREEMENT_URL=https://telegra.ph/your-user-agreement
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=exvpn_bot
+POSTGRES_USER=bot
+POSTGRES_PASSWORD=secret
 
-# Payment (опционально)
-YOOKASSA_SHOP_ID=your_shop_id
-YOOKASSA_SECRET_KEY=your_secret_key
-
-# Database
-DATABASE_PATH=./data/bot.db
+YOOKASSA_SHOP_ID=shop_id
+YOOKASSA_SECRET_KEY=secret_key
 ```
 
-### 3. Установка зависимостей (локально)
+`PASSWORD_ENCRYPTION_KEY` нужен для шифрования паролей панелей в БД.
+
+Сгенерировать ключ можно так:
+
+```bash
+python -c "from Crypto.Random import get_random_bytes; import base64; print(base64.b64encode(get_random_bytes(16)).decode())"
+```
+
+## Запуск локально
+
+1. Установить зависимости:
 
 ```bash
 poetry install
 ```
 
-### 4. Запуск (локально)
+2. Убедиться, что PostgreSQL доступен и `.env` заполнен.
+
+3. Запустить бота:
 
 ```bash
 poetry run python -m bot.main
 ```
 
-### 5. Запуск через Docker Compose
+## Запуск через Docker Compose
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-## Использование
+Сервисы:
 
-### Команды пользователя
+- `postgres`
+- `exvpn-bot`
 
-- `/start` - Регистрация и главное меню
-- `🔑 Получить ключ` - Выбор региона и получение ключа подключения
-- `👤 Профиль` - Информация о подписке и ключах
-- `💎 Подписка` - Покупка/продление подписки
+## Что делает scheduler
 
-### Команды администратора
+Scheduler запускается каждый час и:
 
-- `/admin` - Вход в админ-панель
-- `🌐 Кластеры` - Управление кластерами
-- `👥 Клиенты` - Статистика клиентов
-- `📊 Статистика` - Общая статистика системы
+- находит пользователей с истекшей подпиской;
+- удаляет их клиентов с панелей `3x-ui`;
+- удаляет связанные `peers` из БД;
+- переводит пользователя в статус `expired`.
 
-## Структура проекта
+## Админские возможности
 
-```
-bot/
-├── main.py                      # Точка входа
-├── management/
-│   ├── settings.py              # Настройки из .env
-│   └── dependencies.py          # DI контейнер
-├── core/
-│   ├── api_client.py           # HTTP клиент для API
-│   ├── auth.py                 # Управление JWT токенами
-│   └── exceptions.py           # Кастомные исключения
-├── entities/
-│   ├── client/                 # Клиенты VPN
-│   ├── cluster/                # VPN серверы/регионы
-│   ├── peer/                   # Подключения (ключи)
-│   ├── subscription/           # Подписки и тарифы
-│   └── user/                   # Пользователи бота
-├── routers/
-│   ├── start.py                # Регистрация
-│   ├── locations.py            # Выбор региона
-│   ├── subscription.py         # Подписки
-│   ├── profile.py              # Профиль
-│   └── admin/                  # Админ-панель
-├── keyboards/                  # Клавиатуры
-├── messages/                   # Текстовые сообщения
-├── middlewares/                # Middleware
-└── utils/                      # Утилиты
-```
+- управление кластерами `3x-ui`;
+- регистрация клиентов вручную;
+- управление тарифами;
+- просмотр статистики;
+- создание и удаление промокодов;
+- массовые рассылки;
+- обработка обращений пользователей.
 
-## Интеграция с Central API
+## Ограничения и замечания
 
-Бот взаимодействует с Central API через следующие эндпоинты:
+- тестов в репозитории пока нет;
+- состояние tracked-сообщений хранится в памяти и теряется при рестарте;
+- для нестабильных или self-signed панелей рекомендуется отключение TLS verify через `XRAY_SKIP_SSL_VERIFY`.
 
-- `POST /auth/login` - Аутентификация
-- `POST /auth/refresh` - Обновление токена
-- `GET /clients/` - Список клиентов
-- `POST /clients/` - Создание клиента
-- `PATCH /clients/{id}` - Обновление подписки
-- `GET /clusters/` - Список кластеров
-- `POST /clusters/{id}/restart` - Перезапуск кластера
-- `POST /peers/` - Создание ключа (peer)
-- `GET /peers/` - Список ключей
+## Полезные файлы
 
-## Разработка
-
-### Принципы кода
-
-- **DRY** - Don't Repeat Yourself
-- **SOLID** - Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion
-- **Чистая архитектура** - разделение по слоям и сущностям
-- **Без комментариев** - код должен быть самодокументируемым
-- **Type hints** - всегда указывать типы
-
-### Добавление нового функционала
-
-1. Определите сущность (entities/)
-2. Создайте models.py с pydantic моделями
-3. Создайте repository.py для работы с API
-4. Создайте service.py для бизнес-логики
-5. Создайте router в routers/
-6. Подключите router в main.py
-
-## Логирование
-
-Логи сохраняются в `bot/data/bot.log` и выводятся в консоль.
-
-Уровень логирования: INFO
-
-## База данных
-
-Используется SQLite для хранения связи telegram_id ↔ client_id.
-
-Путь к БД: `./bot/data/bot.db` (настраивается через DATABASE_PATH)
-
-## Тестирование подписки
-
-Для тестирования создания ключей без оплаты используйте кнопку "🧪 Тестовая подписка" в меню подписок. Она активирует подписку на 30 дней.
-
-## Troubleshooting
-
-### Ошибка аутентификации с API
-
-Проверьте:
-- CENTRAL_API_URL правильно указан
-- CENTRAL_API_USERNAME и CENTRAL_API_PASSWORD корректны
-- API доступен и запущен
-
-### Не создаются ключи
-
-Проверьте:
-- Кластеры правильно настроены в CLUSTERS
-- UUID кластеров совпадают с реальными в API
-- У пользователя активная подписка
-
-### База данных не создается
-
-Проверьте:
-- Директория ./bot/data/ существует
-- Есть права на запись
-
-## Лицензия
-
-Proprietary
-
-## Контакты
-
-homostultus39@gmail.com
+- [bot/core/xray_panel_client.py](/home/limpizz/Projects/exvpn-bot-1/bot/core/xray_panel_client.py)
+- [bot/database/management/operations/user.py](/home/limpizz/Projects/exvpn-bot-1/bot/database/management/operations/user.py)
+- [bot/database/management/operations/peer.py](/home/limpizz/Projects/exvpn-bot-1/bot/database/management/operations/peer.py)
+- [bot/routers/keys.py](/home/limpizz/Projects/exvpn-bot-1/bot/routers/keys.py)
+- [bot/routers/subscription.py](/home/limpizz/Projects/exvpn-bot-1/bot/routers/subscription.py)

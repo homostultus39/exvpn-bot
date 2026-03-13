@@ -194,10 +194,11 @@ class XrayPanelClient:
         found = self._find_client_in_inbounds(inbounds, client_email)
         if found is None:
             return
-        _, existing = found
+        inbound, existing = found
+        inbound_id = getattr(inbound, "id", None)
         client_id = str(getattr(existing, "id", "") or "")
-        if client_id:
-            await self.api.client.delete(client_id)
+        if inbound_id is not None and client_id:
+            await self.api.client.delete(int(inbound_id), client_id)
 
     async def update_client(self, client_email: str, expires_at: datetime | None) -> None:
         await self._login()

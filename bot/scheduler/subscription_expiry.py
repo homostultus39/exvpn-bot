@@ -15,8 +15,8 @@ async def run_subscription_expiry_job() -> None:
             updated = await expire_outdated_subscriptions(session)
         if updated:
             logger.info(f"Updated expired subscriptions: {updated}")
-    except Exception as e:
-        logger.error(f"Subscription scheduler error: {e}")
+    except Exception:
+        logger.exception("Subscription scheduler error")
 
 
 def create_subscription_expiry_scheduler() -> AsyncIOScheduler:

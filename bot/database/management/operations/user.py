@@ -12,7 +12,10 @@ from bot.database.management.operations.peer import (
 )
 from bot.database.models import UserModel, SubscriptionStatus
 from bot.database.management.operations.tariffs import get_tariff_by_code
+from bot.management.logger import configure_logger
 from bot.management.settings import get_settings
+
+logger = configure_logger("USER_OPERATIONS", "blue")
 
 
 async def get_admin_by_user_id(session: AsyncSession, user_id: int) -> UserModel | None:
@@ -272,14 +275,32 @@ async def expire_outdated_subscriptions(session: AsyncSession) -> int:
     )
     users = list(result.scalars().all())
     for user in users:
+        cleanup_failed = False
         peers = await get_peers_by_user(session, user.id)
         for peer in peers:
             cluster = await get_cluster_by_id(session, peer.cluster_id)
             if cluster is None:
+                logger.warning(
+                    f"Skipping missing cluster {peer.cluster_id} while expiring user {user.user_id}"
+                )
                 continue
-            xray_client = XrayPanelClient.from_cluster(cluster)
-            client_email = peer.client_email or str(user.user_id)
-            await xray_client.delete_client(client_email)
+            try:
+                xray_client = XrayPanelClient.from_cluster(cluster)
+                client_email = peer.client_email or str(user.user_id)
+                await xray_client.delete_client(client_email)
+            except Exception as error:
+                cleanup_failed = True
+                logger.error(
+                    f"Failed to delete expired client from panel: "
+                    f"user_id={user.user_id}, peer_id={peer.id}, cluster_id={cluster.id}, "
+                    f"endpoint={cluster.endpoint}, client_email={peer.client_email or str(user.user_id)}, "
+                    f"error={error}"
+                )
+        if cleanup_failed:
+            logger.warning(
+                f"Postponing expiration finalization for user {user.user_id} due to panel cleanup errors"
+            )
+            continue
         await delete_peers_by_user(session, user.id)
         user.subscription_status = SubscriptionStatus.EXPIRED.value
         session.add(user)
